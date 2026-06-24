@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S&OP 포케스팅 시스템</title>
+<style>
+:root{--bg:#0f1117;--sf:#1a1d27;--sf2:#22263a;--bd:#2e3350;--ac:#6c7bff;--ac2:#a78bfa;--tx:#e2e4f0;--tx2:#8b90b0;--red:#f87171;--org:#fb923c;--ylw:#fbbf24;--grn:#34d399;--blu:#60a5fa}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;font-size:14px}
+/* LOGIN */
+#login{display:flex;align-items:center;justify-content:center;min-height:100vh}
+.lbox{background:var(--sf);border:1px solid var(--bd);border-radius:16px;padding:44px 40px;width:400px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.llogo{text-align:center;margin-bottom:28px}
+.llogo h1{font-size:22px;font-weight:700;color:var(--ac2)}
+.llogo p{font-size:12px;color:var(--tx2);margin-top:4px}
+.lbox label{display:block;font-size:11px;color:var(--tx2);margin:14px 0 5px;text-transform:uppercase;letter-spacing:.5px}
+.lbox select,.lbox input{width:100%;background:var(--bg);border:1px solid var(--bd);color:var(--tx);padding:10px 13px;border-radius:8px;font-size:14px;outline:none}
+.lbox select:focus,.lbox input:focus{border-color:var(--ac)}
+.btn-login{width:100%;margin-top:22px;background:var(--ac);color:#fff;border:none;padding:12px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer}
+.btn-login:hover{opacity:.85}
+.gas-status{text-align:center;font-size:11px;margin-top:14px;padding:8px;border-radius:6px}
+.gas-ok{color:var(--grn);background:rgba(52,211,153,.1)}
+.gas-err{color:var(--red);background:rgba(248,113,113,.1)}
+.gas-chk{color:var(--tx2);background:var(--sf2)}
+/* TOPBAR */
+#app{display:none}
+.topbar{background:var(--sf);border-bottom:1px solid var(--bd);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:54px;position:sticky;top:0;z-index:100}
+.tl{display:flex;align-items:center;gap:14px}
+.tlogo{font-size:15px;font-weight:700;color:var(--ac2)}
+.tuser{font-size:13px;color:var(--tx2)}
+.tbadge{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600}
+.admin-b{background:rgba(167,139,250,.15);color:var(--ac2)}
+.sales-b{background:rgba(108,123,255,.15);color:var(--ac)}
+.topright{display:flex;align-items:center;gap:10px}
+.deadline-chip{font-size:12px;padding:4px 12px;border-radius:20px;background:var(--sf2);border:1px solid var(--bd);color:var(--tx2)}
+.deadline-chip.urgent{color:var(--red);border-color:var(--red);background:rgba(248,113,113,.08)}
+.btn-out{font-size:12px;color:var(--tx2);background:none;border:1px solid var(--bd);padding:6px 12px;border-radius:6px;cursor:pointer}
+/* TABS */
+.tabs{display:flex;border-bottom:1px solid var(--bd);padding:0 20px;background:var(--sf);overflow-x:auto}
+.tab{padding:13px 16px;font-size:13px;font-weight:500;color:var(--tx2);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;transition:all .2s}
+.tab.on{color:var(--ac2);border-bottom-color:var(--ac2)}
+.tab:hover:not(.on){color:var(--tx)}
+/* CONTENT */
+.ct{padding:20px;max-width:1500px;margin:0 auto}
+/* STATS */
+.sg{display:grid;gap:13px;margin-bottom:20px}
+.sg4{grid-template-columns:repeat(4,1fr)}
+.sg3{grid-template-columns:repeat(3,1fr)}
+.sc{background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:16px 18px}
+.sl{font-size:11px;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px}
+.sv{font-size:24px;font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums}
+.sv.red{color:var(--red)}.sv.org{color:var(--org)}.sv.ylw{color:var(--ylw)}.sv.grn{color:var(--grn)}.sv.blu{color:var(--blu)}
+/* TABLE */
+.th{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+.ttl{font-size:17px;font-weight:700}
+.tsub{font-size:12px;color:var(--tx2);margin-top:2px}
+.srch-row{display:flex;gap:8px;margin-bottom:13px;flex-wrap:wrap;align-items:center}
+.srch-row input,.srch-row select{background:var(--sf);border:1px solid var(--bd);color:var(--tx);padding:8px 12px;border-radius:8px;font-size:13px;outline:none}
+.srch-row input{flex:1;min-width:200px}
+.srch-row input:focus,.srch-row select:focus{border-color:var(--ac)}
+.tw{overflow-x:auto;border-radius:10px;border:1px solid var(--bd)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:var(--sf2);color:var(--tx2);font-weight:600;padding:8px 10px;text-align:center;white-space:nowrap;border-bottom:1px solid var(--bd);letter-spacing:.2px;position:sticky;top:0}
+th.L{text-align:left}
+td{padding:7px 10px;border-bottom:1px solid var(--bd);vertical-align:middle;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(108,123,255,.03)}
+.pn{font-weight:500;font-size:13px}
+.pc{font-size:10px;color:var(--tx2);margin-top:1px}
+.nr{text-align:right;font-variant-numeric:tabular-nums}
+.warn{color:var(--org);font-weight:600}
+.neg{color:var(--red);font-weight:600}
+.grn-t{color:var(--grn)}
+/* FCST INPUT */
+.fi{width:74px;background:var(--sf2);border:1px solid var(--bd);color:var(--tx);padding:4px 6px;border-radius:5px;font-size:12px;text-align:right;outline:none;font-variant-numeric:tabular-nums}
+.fi:focus{border-color:var(--ac);background:rgba(108,123,255,.08)}
+.fi.ch{border-color:var(--ylw);background:rgba(251,191,36,.07)}
+.fi:disabled{opacity:.4;cursor:not-allowed}
+.ch-tab{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.ch-pill{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid var(--bd);cursor:pointer;color:var(--tx2);transition:all .2s}
+.ch-pill.on{background:var(--ac);border-color:var(--ac);color:#fff}
+/* SAVE / CONFIRM */
+.sbar{position:fixed;bottom:0;left:0;right:0;background:var(--sf);border-top:1px solid var(--bd);padding:12px 20px;display:none;align-items:center;justify-content:space-between;z-index:200}
+.sbar.on{display:flex}
+.smsg{font-size:13px;color:var(--ylw)}
+.sbtns{display:flex;gap:8px;align-items:center}
+.btn-dc{background:none;color:var(--tx2);border:1px solid var(--bd);padding:8px 14px;border-radius:7px;font-size:13px;cursor:pointer}
+.btn-sv{background:var(--grn);color:#0f1117;border:none;padding:8px 22px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer}
+.btn-confirm{background:var(--ac2);color:#0f1117;border:none;padding:8px 22px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer}
+.btn-confirm:disabled{opacity:.4;cursor:not-allowed}
+/* STATUS BADGES */
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600}
+.badge-done{background:rgba(52,211,153,.15);color:var(--grn)}
+.badge-partial{background:rgba(251,191,36,.15);color:var(--ylw)}
+.badge-wait{background:var(--sf2);color:var(--tx2)}
+.badge-locked{background:rgba(248,113,113,.1);color:var(--red)}
+/* FLAGS */
+.stitle{font-size:14px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:7px}
+.stitle .cnt{font-size:11px;color:var(--tx2);font-weight:400}
+.fc{background:var(--sf);border-left:3px solid var(--bd);border-radius:8px;padding:11px 14px;margin-bottom:7px;display:flex;align-items:flex-start;gap:11px}
+.fc.red{border-left-color:var(--red)}.fc.org{border-left-color:var(--org)}.fc.ylw{border-left-color:var(--ylw)}.fc.blu{border-left-color:var(--blu)}
+.fe{font-size:16px;flex-shrink:0;margin-top:1px}
+.fb{flex:1}
+.fp{font-size:13px;font-weight:600}
+.fd{font-size:11px;color:var(--tx2);margin-top:3px;line-height:1.5}
+.fm{font-size:10px;color:var(--tx2);margin-top:2px}
+.btn-ag{font-size:11px;padding:4px 8px;border-radius:5px;background:var(--sf2);border:1px solid var(--bd);color:var(--tx2);cursor:pointer;flex-shrink:0;white-space:nowrap}
+.btn-ag:hover{color:var(--ac);border-color:var(--ac)}
+/* AGENDA */
+.ag-item{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:12px 14px;margin-bottom:7px;display:flex;gap:10px;align-items:flex-start}
+.ag-num{background:var(--sf2);color:var(--ac2);font-size:11px;font-weight:700;padding:3px 8px;border-radius:5px;flex-shrink:0}
+.ag-ct{flex:1}
+.ag-tag{display:inline-block;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700;margin-bottom:4px}
+.t-order{background:rgba(248,113,113,.15);color:var(--red)}
+.t-fcst{background:rgba(251,191,36,.15);color:var(--ylw)}
+.t-ops{background:rgba(96,165,250,.15);color:var(--blu)}
+.t-np{background:rgba(52,211,153,.15);color:var(--grn)}
+.ag-tit{font-size:13px;font-weight:600;margin-bottom:3px}
+.ag-bod{font-size:12px;color:var(--tx2)}
+.btn-del{background:none;border:none;color:var(--tx2);cursor:pointer;font-size:16px;flex-shrink:0;padding:0 3px}
+.btn-del:hover{color:var(--red)}
+/* MODAL */
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;z-index:500}
+.mo.on{display:flex}
+.mbox{background:var(--sf);border:1px solid var(--bd);border-radius:14px;padding:28px;width:480px;max-width:96vw;max-height:90vh;overflow-y:auto}
+.mbox h3{font-size:15px;font-weight:700;margin-bottom:16px}
+.mbox label{display:block;font-size:11px;color:var(--tx2);margin:12px 0 4px;text-transform:uppercase;letter-spacing:.4px}
+.mbox input,.mbox select,.mbox textarea{width:100%;background:var(--bg);border:1px solid var(--bd);color:var(--tx);padding:9px 11px;border-radius:7px;font-size:13px;outline:none;font-family:inherit}
+.mbox input:focus,.mbox select:focus,.mbox textarea:focus{border-color:var(--ac)}
+.mbox textarea{resize:vertical;min-height:65px}
+.mbtn{display:flex;gap:8px;margin-top:20px;justify-content:flex-end}
+.btn-p{background:var(--ac);color:#fff;border:none;padding:8px 20px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer}
+.btn-s{background:none;color:var(--tx2);border:1px solid var(--bd);padding:8px 14px;border-radius:7px;font-size:13px;cursor:pointer}
+.btn-danger{background:rgba(248,113,113,.15);color:var(--red);border:1px solid rgba(248,113,113,.3);padding:8px 14px;border-radius:7px;font-size:13px;cursor:pointer}
+/* LOADING */
+.loading{display:flex;align-items:center;justify-content:center;padding:48px;color:var(--tx2);gap:10px}
+.spin{width:20px;height:20px;border:2px solid var(--bd);border-top-color:var(--ac);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* TOAST */
+.toast{position:fixed;bottom:72px;left:50%;transform:translateX(-50%);padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+.toast.on{opacity:1}
+.toast.ok{background:var(--grn);color:#0f1117}
+.toast.err{background:var(--red);color:#fff}
+/* PRINT */
+@media print{.topbar,.tabs,.sbar,.btn-del,.btn-ag,.btn-p,.btn-s,.no-print{display:none!important}.ct{padding:0}}
+@media(max-width:768px){.sg4{grid-template-columns:repeat(2,1fr)}.ct{padding:12px}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login">
+  <div class="lbox">
+    <div class="llogo"><h1>S&OP 포케스팅</h1><p>메디테라피 · 히디프</p></div>
+    <div id="gas-status" class="gas-status gas-chk">서버 연결 확인 중...</div>
+    <label>역할 선택</label>
+    <select id="r-sel" onchange="onRC()">
+      <option value="">-- 선택하세요 --</option>
+      <option value="admin">📊 관리자 (다인)</option>
+      <option value="sales">📦 영업담당자</option>
+    </select>
+    <div id="m-wrap" style="display:none">
+      <label>담당자 이름</label>
+      <select id="m-sel"><option value="">-- 선택 --</option></select>
+    </div>
+    <div id="pw-wrap" style="display:none">
+      <label>관리자 PIN</label>
+      <input type="password" id="pw" placeholder="관리자 PIN" maxlength="8">
+    </div>
+    <button class="btn-login" onclick="doLogin()">로그인</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="topbar">
+    <div class="tl">
+      <span class="tlogo">S&OP</span>
+      <span class="tuser" id="t-user"></span>
+      <span class="tbadge" id="t-badge"></span>
+      <span class="deadline-chip" id="deadline-chip"></span>
+    </div>
+    <div class="topright">
+      <span style="font-size:12px;color:var(--tx2)" id="week-label"></span>
+      <button class="btn-out" onclick="doLogout()">로그아웃</button>
+    </div>
+  </div>
+  <div class="tabs" id="tabs"></div>
+  <div class="ct" id="ct"></div>
+</div>
+
+<div class="sbar" id="sbar">
+  <span class="smsg" id="sbar-msg">⚡ 저장되지 않은 변경사항</span>
+  <div class="sbtns">
+    <button class="btn-dc" onclick="disc()">취소</button>
+    <button class="btn-sv" onclick="saveFcst()">저장</button>
+    <button class="btn-confirm" id="btn-confirm" onclick="confirmFcst()" disabled>확정</button>
+  </div>
+</div>
+
+<!-- AGENDA MODAL -->
+<div class="mo" id="ag-mo">
+  <div class="mbox">
+    <h3>아젠다 추가</h3>
+    <label>구분</label>
+    <select id="ag-type"><option value="order">🔴 발주 검토</option><option value="fcst">🟡 포케스팅 이슈</option><option value="ops">🔵 운영 검토</option><option value="np">🟢 신제품</option></select>
+    <label>품목명 / 코드</label><input id="ag-prod" placeholder="예: 레티날 세럼 150ml">
+    <label>내용</label><textarea id="ag-body" placeholder="논의가 필요한 내용"></textarea>
+    <label>담당자</label><input id="ag-owner" placeholder="예: Jimmy">
+    <div class="mbtn"><button class="btn-s" onclick="closeMo('ag-mo')">취소</button><button class="btn-p" onclick="submitAg()">추가</button></div>
+  </div>
+</div>
+
+<!-- PRODUCT MODAL -->
+<div class="mo" id="prod-mo">
+  <div class="mbox">
+    <h3 id="prod-mo-title">품목 추가</h3>
+    <label>브랜드</label><select id="p-brand"><option>메디테라피</option><option>히디프</option></select>
+    <label>마스터코드</label><input id="p-master" placeholder="예: S027001">
+    <label>코드</label><input id="p-code" placeholder="예: 2515">
+    <label>품목명</label><input id="p-product" placeholder="품목명 입력">
+    <label>등급</label><select id="p-grade"><option>A</option><option>B</option><option>N</option><option>S</option></select>
+    <label>차수</label><input id="p-seq" placeholder="예: 1차">
+    <label>MOQ</label><input id="p-moq" type="number" placeholder="0">
+    <label>사용기한</label><input id="p-expiry" placeholder="예: 36M">
+    <div class="mbtn">
+      <button class="btn-s" onclick="closeMo('prod-mo')">취소</button>
+      <button class="btn-danger" id="p-del-btn" onclick="deleteProduct()" style="display:none">삭제</button>
+      <button class="btn-p" onclick="submitProduct()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIG MODAL -->
+<div class="mo" id="cfg-mo">
+  <div class="mbox">
+    <h3>시스템 설정</h3>
+    <label>입력 마감일</label><input type="date" id="cfg-deadline">
+    <label>마감 시각</label><input type="time" id="cfg-time" value="18:00">
+    <label>주차 라벨 (예: 06.25_FCST)</label><input id="cfg-week" placeholder="MM.DD_FCST">
+    <div class="mbtn"><button class="btn-s" onclick="closeMo('cfg-mo')">취소</button><button class="btn-p" onclick="submitConfig()">저장</button></div>
+  </div>
+</div>
+
+<!-- MANAGER MODAL -->
+<div class="mo" id="mgr-mo">
+  <div class="mbox">
+    <h3>담당자 관리</h3>
+    <div id="mgr-list-mo"></div>
+    <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--bd)">
+      <div style="font-size:11px;color:var(--tx2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">새 담당자 추가</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <input id="new-mgr-name" placeholder="이름 (영문)" style="flex:1;background:var(--bg);border:1px solid var(--bd);color:var(--tx);padding:8px 11px;border-radius:7px;font-size:13px;outline:none">
+        <button class="btn-p" onclick="addMgr()">추가</button>
+      </div>
+      <div style="font-size:11px;color:var(--tx2);margin-bottom:6px">채널 배정</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px">
+        <select id="assign-mgr" style="background:var(--bg);border:1px solid var(--bd);color:var(--tx);padding:8px;border-radius:7px;font-size:13px;outline:none"></select>
+        <select id="assign-ch" style="background:var(--bg);border:1px solid var(--bd);color:var(--tx);padding:8px;border-radius:7px;font-size:13px;outline:none"></select>
+        <button class="btn-p" onclick="assignCh()">배정</button>
+      </div>
+    </div>
+    <div class="mbtn"><button class="btn-s" onclick="closeMgr()">닫기</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── CONFIG ────────────────────────────────────────────────────
+// ⚠️ GAS 배포 후 이 URL을 교체하세요
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbyIUjiHwJ1qje57tgvJboRIduyRA2xVv4U_Cy59GEsKrJfFcaLRhamhejqSaXKnioQvpg/exec';
+
+const MONTHS = ['6','7','8','9','10','11','12'];
+
+// ── STATE ─────────────────────────────────────────────────────
+let role=null, user=null;
+let config={}, products=[], managers={}, allChannels=[];
+let weekLabel='', statusMap={};
+let fcstData={};   // key: master|channel → {acts, fcsts:{m:v}, weeks:{m:[w1..w4]}}
+let chg={};        // 미저장 변경사항
+let curTab=null, curCh=null;
+let isDeadlinePassed=false, isConfirmed=false;
+
+// ── API ───────────────────────────────────────────────────────
+async function api(action, params={}) {
+  const url = GAS_URL + '?action=' + action + Object.entries(params).map(([k,v])=>`&${k}=${encodeURIComponent(v)}`).join('');
+  const r = await fetch(url);
+  return r.json();
+}
+async function apiPost(body) {
+  const r = await fetch(GAS_URL, { method:'POST', body: JSON.stringify(body) });
+  return r.json();
+}
+
+// ── INIT ──────────────────────────────────────────────────────
+async function checkServer() {
+  const el = document.getElementById('gas-status');
+  try {
+    if (false) {
+      el.textContent = '⚠️ GAS URL 미설정 — 로컬 모드로 동작';
+      el.className = 'gas-status gas-err';
+      return false;
+    }
+    const cfg = await api('getConfig');
+    if (cfg.error) throw new Error(cfg.error);
+    el.textContent = '✅ 서버 연결됨';
+    el.className = 'gas-status gas-ok';
+    return true;
+  } catch(e) {
+    el.textContent = '❌ 서버 연결 실패: ' + e.message;
+    el.className = 'gas-status gas-err';
+    return false;
+  }
+}
+
+async function loadAll() {
+  const [cfg, prods, mgrs, status] = await Promise.all([
+    api('getConfig'),
+    api('getProducts'),
+    api('getManagers'),
+    api('getStatus', {week: weekLabel})
+  ]);
+  config = cfg;
+  products = Array.isArray(prods) ? prods : [];
+  managers = mgrs || {};
+  statusMap = status || {};
+  allChannels = [...new Set(Object.values(managers).flat())];
+
+  // 마감일 체크
+  checkDeadline();
+  // 주차 라벨
+  weekLabel = config.CURRENT_WEEK || weekLabel;
+}
+
+function checkDeadline() {
+  const dl = config.DEADLINE;
+  const dlTime = config.DEADLINE_TIME || '18:00';
+  if (!dl) { isDeadlinePassed = false; updateDeadlineUI(); return; }
+  const deadline = new Date(dl + 'T' + dlTime + ':00');
+  isDeadlinePassed = new Date() > deadline;
+  updateDeadlineUI();
+}
+
+function updateDeadlineUI() {
+  const chip = document.getElementById('deadline-chip');
+  if (!config.DEADLINE) { chip.textContent = ''; return; }
+  const dl = new Date(config.DEADLINE + 'T' + (config.DEADLINE_TIME||'18:00') + ':00');
+  const diff = dl - new Date();
+  if (isDeadlinePassed) {
+    chip.textContent = '🔒 입력 마감';
+    chip.className = 'deadline-chip urgent';
+  } else {
+    const hrs = Math.floor(diff/3600000);
+    chip.textContent = `⏰ 마감까지 ${hrs < 24 ? hrs+'시간' : Math.floor(hrs/24)+'일'}`;
+    chip.className = hrs < 24 ? 'deadline-chip urgent' : 'deadline-chip';
+  }
+}
+
+// ── AUTH ─────────────────────────────────────────────────────
+function onRC() {
+  const r = document.getElementById('r-sel').value;
+  document.getElementById('m-wrap').style.display = r==='sales'?'block':'none';
+  document.getElementById('pw-wrap').style.display = r==='admin'?'block':'none';
+  if (r==='sales') {
+    const sel = document.getElementById('m-sel');
+    sel.innerHTML = '<option value="">-- 선택 --</option>' +
+      Object.keys(managers).map(m=>`<option>${m}</option>`).join('');
+  }
+}
+
+async function doLogin() {
+  role = document.getElementById('r-sel').value;
+  if (!role) { toast('역할을 선택하세요','err'); return; }
+  if (role==='admin') {
+    const pw = document.getElementById('pw').value;
+    if (pw !== (config.ADMIN_PIN||'1234')) { toast('PIN이 올바르지 않습니다','err'); return; }
+    user = '관리자';
+  } else {
+    user = document.getElementById('m-sel').value;
+    if (!user) { toast('담당자를 선택하세요','err'); return; }
+  }
+  document.getElementById('login').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('t-user').textContent = user;
+  const b=document.getElementById('t-badge');
+  b.textContent = role==='admin'?'관리자':'영업';
+  b.className = 'tbadge '+(role==='admin'?'admin-b':'sales-b');
+  document.getElementById('week-label').textContent = weekLabel;
+
+  // 확정 상태 체크
+  isConfirmed = statusMap[user]?.status === '확정';
+
+  await loadFcstData();
+  buildTabs();
+}
+
+function doLogout() {
+  role=null; user=null; chg={};
+  document.getElementById('login').style.display='flex';
+  document.getElementById('app').style.display='none';
+  document.getElementById('sbar').classList.remove('on');
+}
+
+// ── FCST DATA ─────────────────────────────────────────────────
+async function loadFcstData() {
+  const result = await api('getFcst', {week: weekLabel});
+  fcstData = {};
+  if (result.rows) {
+    for (const row of result.rows) {
+      const key = row.master + '|' + row.channel;
+      fcstData[key] = {
+        acts: row.acts || {},
+        fcsts: row.fcsts || {},
+        weeks: row.weeks || {},
+        confirmed: row.confirmed
+      };
+    }
+  }
+}
+
+// ── TABS ─────────────────────────────────────────────────────
+function buildTabs() {
+  const tabs = role==='admin'
+    ? [{id:'dash',l:'📊 대시보드'},{id:'agg',l:'📋 전체 집계'},{id:'agenda',l:'📌 주요 Agenda'},{id:'input',l:'✏️ 포케스팅 입력'},{id:'products',l:'📦 품목 관리'},{id:'settings',l:'⚙️ 설정'}]
+    : [{id:'input',l:'✏️ 포케스팅 입력'},{id:'my',l:'📈 내 현황'}];
+  document.getElementById('tabs').innerHTML = tabs.map((t,i)=>
+    `<button class="tab${i===0?' on':''}" onclick="sw('${t.id}',this)">${t.l}</button>`
+  ).join('');
+  sw(tabs[0].id, document.querySelector('.tab'));
+}
+function sw(id, btn) {
+  curTab=id;
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  render(id);
+}
+function render(id) {
+  const el=document.getElementById('ct');
+  if (id==='input') renderInput(el);
+  else if (id==='dash') renderDash(el);
+  else if (id==='agg') renderAgg(el);
+  else if (id==='agenda') renderAgenda(el);
+  else if (id==='products') renderProducts(el);
+  else if (id==='settings') renderSettings(el);
+  else if (id==='my') renderMy(el);
+}
+
+// ── INPUT ─────────────────────────────────────────────────────
+function renderInput(el) {
+  const myChs = role==='admin' ? allChannels : (managers[user]||[]);
+  if (!curCh || !myChs.includes(curCh)) curCh = myChs[0]||'';
+
+  const locked = isDeadlinePassed || isConfirmed;
+
+  el.innerHTML = `
+    <div class="th">
+      <div>
+        <div class="ttl">포케스팅 입력</div>
+        <div class="tsub">${weekLabel} · 월별 판매 예상 수량 (6~12월) ${locked?'<span style="color:var(--red)">🔒 '+( isConfirmed?'확정 완료':'마감')+'</span>':''}</div>
+      </div>
+      ${!locked && !isConfirmed ? `<button class="btn-confirm" onclick="confirmFcst()" style="background:var(--ac2);color:#0f1117;border:none;padding:8px 22px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer">✅ 입력 확정</button>` : ''}
+    </div>
+    <div class="ch-tab" id="ch-tabs">${myChs.map(ch=>`<button class="ch-pill${ch===curCh?' on':''}" onclick="switchCh('${ch}',this)">${ch}</button>`).join('')}</div>
+    <div class="srch-row"><input type="text" placeholder="품목명 또는 코드 검색..." oninput="drawInput(this.value)" id="srch"></div>
+    <div id="input-tbl"></div>
+    <div style="height:68px"></div>
+  `;
+  drawInput();
+}
+
+function switchCh(ch, btn) {
+  curCh = ch;
+  document.querySelectorAll('.ch-pill').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  drawInput();
+}
+
+function drawInput(filter) {
+  const locked = isDeadlinePassed || isConfirmed;
+  const q = (filter!==undefined?filter:(document.getElementById('srch')?.value||'')).toLowerCase();
+  const list = products.filter(p=>!q||p.product.toLowerCase().includes(q)||(p.master||'').includes(q));
+
+  if (!list.length) {
+    document.getElementById('input-tbl').innerHTML=`<div class="loading"><span>검색 결과 없음</span></div>`;
+    return;
+  }
+
+  // 채널 데이터 가져오기 (구글시트에서 로드한 값 + 사용자 변경)
+  const rows = list.map(p => {
+    const key = (p.master||p.code) + '|' + curCh;
+    const saved = fcstData[key] || {};
+    const acts = saved.acts || {};
+
+    const fcstInputs = MONTHS.map(m => {
+      const savedV = saved.fcsts?.[m]??0;
+      const v = chg[key]?.[m]??savedV;
+      return `<td><input type="number" class="fi${chg[key]?.[m]!==undefined?' ch':''}" value="${Math.round(v)||''}" placeholder="0"
+        data-key="${key}" data-m="${m}" oninput="onI(this)" min="0"
+        ${locked?'disabled':''}></td>`;
+    }).join('');
+
+    return `<tr>
+      <td class="L" style="min-width:180px;position:sticky;left:0;background:var(--bg)">
+        <div class="pn">${p.product}</div>
+        <div class="pc">${p.master||p.code} · ${p.brand}</div>
+      </td>
+      ${[1,2,3,4,5].map(m=>`<td class="nr" style="color:var(--tx2)">${fmt(acts[String(m)])}</td>`).join('')}
+      ${fcstInputs}
+    </tr>`;
+  }).join('');
+
+  document.getElementById('input-tbl').innerHTML = `
+    <div class="tw"><table>
+      <thead><tr>
+        <th class="L" style="position:sticky;left:0;background:var(--sf2)">품목명</th>
+        <th>1월</th><th>2월</th><th>3월</th><th>4월</th><th>5월</th>
+        ${MONTHS.map(m=>`<th style="color:var(--ac2)">${m}월 FCST</th>`).join('')}
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+
+  // 저장 바 표시 여부
+  updateSaveBar();
+}
+
+function onI(inp) {
+  const key=inp.dataset.key, m=inp.dataset.m, v=+inp.value||0;
+  if (!chg[key]) chg[key]={};
+  chg[key][m]=v;
+  inp.classList.add('ch');
+  document.getElementById('sbar').classList.add('on');
+  document.getElementById('btn-confirm').disabled = Object.keys(chg).length > 0;
+}
+
+function updateSaveBar() {
+  const hasChg = Object.keys(chg).length > 0;
+  document.getElementById('sbar').classList.toggle('on', hasChg);
+}
+
+async function saveFcst() {
+  const myChs = role==='admin' ? allChannels : (managers[user]||[]);
+  // 현재 채널의 모든 품목 수집
+  const rows = products.map(p => {
+    const key = (p.master||p.code) + '|' + curCh;
+    const saved = fcstData[key] || {};
+    const fcsts = {};
+    for (const m of MONTHS) {
+      fcsts[m] = chg[key]?.[m] ?? saved.fcsts?.[m] ?? 0;
+    }
+    return {
+      master: p.master, code: p.code, product: p.product,
+      brand: p.brand, region: getRegion(curCh),
+      acts: saved.acts || {},
+      fcsts, weeks: saved.weeks || {}
+    };
+  });
+
+  try {
+    const r = await apiPost({ action:'saveFcst', weekLabel, manager:user, channel:curCh, rows });
+    if (r.error) throw new Error(r.error);
+    // 로컬 상태 업데이트
+    for (const [key, months] of Object.entries(chg)) {
+      if (!fcstData[key]) fcstData[key] = {acts:{}, fcsts:{}, weeks:{}};
+      Object.assign(fcstData[key].fcsts, months);
+    }
+    chg = {};
+    document.querySelectorAll('.fi').forEach(i=>i.classList.remove('ch'));
+    document.getElementById('sbar').classList.remove('on');
+    document.getElementById('btn-confirm').disabled = false;
+    toast(`✅ 저장 완료 (${r.updated||0}건 수정, ${r.appended||0}건 추가)`,'ok');
+  } catch(e) {
+    toast('❌ 저장 실패: '+e.message,'err');
+  }
+}
+
+async function confirmFcst() {
+  if (Object.keys(chg).length > 0) { toast('먼저 저장하세요','err'); return; }
+  if (!confirm(`${user}님의 ${weekLabel} 포케스팅을 확정하시겠습니까?\n확정 후에는 수정이 불가합니다.`)) return;
+  try {
+    const r = await apiPost({ action:'confirmFcst', weekLabel, manager:user });
+    if (r.error) throw new Error(r.error);
+    isConfirmed = true;
+    statusMap[user] = { status:'확정', confirmedAt: new Date().toLocaleString('ko-KR') };
+    toast('✅ 입력 확정 완료','ok');
+    render(curTab);
+  } catch(e) {
+    toast('❌ 확정 실패: '+e.message,'err');
+  }
+}
+
+function disc() {
+  chg={};
+  document.getElementById('sbar').classList.remove('on');
+  drawInput();
+}
+
+function getRegion(ch) {
+  if (ch.includes('KR')||ch.includes('국내')) return '국내';
+  if (ch.includes('TW')||ch.includes('HK')||ch.includes('SG')||ch.includes('쇼피')||ch.includes('아세안')) return '아세안';
+  if (ch.includes('US')||ch.includes('AU')||ch.includes('UK')||ch.includes('DE')||ch.includes('아마존')) return '북미';
+  if (ch.includes('JP')||ch.includes('라쿠텐')||ch.includes('큐텐')) return '일본';
+  if (ch.includes('올리브')||ch.includes('B2B')) return 'B2B';
+  return '기타';
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────
+function renderDash(el) {
+  const mgrs = Object.keys(managers);
+  const confirmed = mgrs.filter(m=>statusMap[m]?.status==='확정');
+  const partial = mgrs.filter(m=>!statusMap[m] && hasAnyInput(m));
+  const waiting = mgrs.filter(m=>!statusMap[m] && !hasAnyInput(m));
+  const flags = getFlags();
+
+  const statusHtml = mgrs.map(m => {
+    const s = statusMap[m];
+    const chs = managers[m]||[];
+    let badge, dot;
+    if (s?.status==='확정') { badge='badge-done'; dot='✓ 확정'; }
+    else if (hasAnyInput(m)) { badge='badge-partial'; dot='입력 중'; }
+    else { badge='badge-wait'; dot='대기 중'; }
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bd)">
+      <div><div style="font-size:13px;font-weight:500">${m}</div><div style="font-size:11px;color:var(--tx2)">${chs.join(', ')||'미배정'}</div></div>
+      <span class="badge ${badge}">${dot}</span>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="sg sg4">
+      <div class="sc"><div class="sl">✅ 입력 확정</div><div class="sv grn">${confirmed.length} / ${mgrs.length}</div></div>
+      <div class="sc"><div class="sl">✏️ 입력 중</div><div class="sv ylw">${partial.length}</div></div>
+      <div class="sc"><div class="sl">⏳ 대기 중</div><div class="sv" style="color:var(--tx2)">${waiting.length}</div></div>
+      <div class="sc"><div class="sl">⚠️ 자동 감지</div><div class="sv red">${flags.length}</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px">
+      <div class="sc"><div class="sl" style="margin-bottom:10px">담당자별 입력 현황</div>${statusHtml}</div>
+      <div class="sc">
+        <div class="sl" style="margin-bottom:10px">주요 Agenda (${(JSON.parse(localStorage.getItem('sop_ag')||'[]')).length}건)</div>
+        ${(JSON.parse(localStorage.getItem('sop_ag')||'[]')).slice(0,5).map(a=>`
+          <div style="display:flex;gap:7px;align-items:center;padding:6px 0;border-bottom:1px solid var(--bd)">
+            <span class="ag-tag ${tc(a.type)}">${tl(a.type)}</span>
+            <span style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.product}</span>
+          </div>`).join('')||'<div style="color:var(--tx2);font-size:13px;padding:14px 0;text-align:center">없음</div>'}
+      </div>
+    </div>
+    <div class="stitle">⚠️ 자동 감지 — 검토 필요 <span class="cnt">${flags.length}건</span></div>
+    ${flags.length===0
+      ?`<div style="text-align:center;padding:30px;color:var(--tx2);background:var(--sf);border-radius:8px">감지된 이슈 없음 🎉</div>`
+      :flags.map(f=>`<div class="fc ${f.lv}">
+          <div class="fe">${f.emoji}</div>
+          <div class="fb"><div class="fp">${f.product}</div><div class="fd">${f.detail}</div><div class="fm">${f.ch}</div></div>
+          <button class="btn-ag" onclick='qAg(${JSON.stringify(f)})'>아젠다↑</button>
+        </div>`).join('')}
+  `;
+}
+
+function hasAnyInput(mgr) {
+  const chs = managers[mgr]||[];
+  return chs.some(ch => products.some(p => {
+    const k=(p.master||p.code)+'|'+ch;
+    return fcstData[k] && Object.values(fcstData[k].fcsts||{}).some(v=>v>0);
+  }));
+}
+
+function getFlags() {
+  const flags=[];
+  for (const p of products) {
+    const master=p.master||p.code;
+    const totFcsts={};
+    for (const m of MONTHS) {
+      totFcsts[m]=allChannels.reduce((s,ch)=>{
+        const k=master+'|'+ch;
+        return s+(chg[k]?.[m]??fcstData[k]?.fcsts?.[m]??0);
+      },0);
+    }
+    const acts=[1,2,3,4,5].map(m=>+(fcstData[master+'|'+allChannels[0]]?.acts?.[String(m)]||0));
+    const actAvg=acts.reduce((a,b)=>a+b,0)/5;
+    for (let i=1;i<MONTHS.length;i++) {
+      const prev=totFcsts[MONTHS[i-1]], curr=totFcsts[MONTHS[i]];
+      if (prev>50&&curr/prev>=2.5)
+        flags.push({lv:'org',emoji:'🟠',product:p.product,ch:`${MONTHS[i-1]}월→${MONTHS[i]}월`,detail:`FCST 급등: ${fmt(prev)}→${fmt(curr)} (${(curr/prev).toFixed(1)}배)`,type:'fcst',master});
+      if (prev>50&&curr>0&&curr/prev<=0.35)
+        flags.push({lv:'org',emoji:'🟠',product:p.product,ch:`${MONTHS[i-1]}월→${MONTHS[i]}월`,detail:`FCST 급락: ${fmt(prev)}→${fmt(curr)} (${Math.round((1-curr/prev)*100)}% 감소)`,type:'fcst',master});
+    }
+    if (actAvg>0&&totFcsts['6']>actAvg*6)
+      flags.push({lv:'ylw',emoji:'🟡',product:p.product,ch:`월평균실적 ${fmt(Math.round(actAvg))}`,detail:`6월FCST ${fmt(totFcsts['6'])} — 실적 대비 ${(totFcsts['6']/actAvg).toFixed(0)}배`,type:'fcst',master});
+  }
+  return flags.slice(0,50);
+}
+
+// ── AGGREGATE ─────────────────────────────────────────────────
+function renderAgg(el) {
+  window._aggP = products.map(p => {
+    const master=p.master||p.code;
+    const byChannel={};
+    const totFcsts={};
+    for (const m of MONTHS) totFcsts[m]=0;
+
+    for (const ch of allChannels) {
+      const k=master+'|'+ch;
+      const d=fcstData[k]||{};
+      const chFcsts={};
+      for (const m of MONTHS) {
+        const v=chg[k]?.[m]??d.fcsts?.[m]??0;
+        chFcsts[m]=v;
+        totFcsts[m]+=v;
+      }
+      if (Object.values(chFcsts).some(v=>v>0)) byChannel[ch]=chFcsts;
+    }
+    const acts=[1,2,3,4,5].map(m=>{
+      const k=master+'|'+allChannels[0];
+      return +(fcstData[k]?.acts?.[String(m)]||0);
+    });
+    return {...p, totFcsts, byChannel, acts, actAvg:acts.reduce((a,b)=>a+b,0)/5};
+  }).sort((a,b)=>(b.totFcsts['6']||0)-(a.totFcsts['6']||0));
+
+  el.innerHTML=`
+    <div class="th"><div><div class="ttl">전체 집계</div><div class="tsub">마스터코드 기준 · 전채널 합산 · 채널별 상세 보기 가능</div></div></div>
+    <div class="srch-row"><input type="text" placeholder="품목 검색..." oninput="filterAgg(this.value)" id="agg-s"></div>
+    <div id="agg-t"></div>`;
+  drawAgg(window._aggP);
+}
+
+function filterAgg(v) {
+  const list=v?window._aggP.filter(p=>p.product.toLowerCase().includes(v.toLowerCase())||(p.master||'').includes(v)):window._aggP;
+  drawAgg(list);
+}
+
+function drawAgg(prods) {
+  const rows=prods.map(p=>{
+    const w=p.actAvg>0&&(p.totFcsts['6']||0)>p.actAvg*6;
+    const chDetail=Object.entries(p.byChannel).map(([ch,f])=>
+      `<tr style="background:rgba(108,123,255,.03)">
+        <td class="L" style="padding-left:28px;font-size:11px;color:var(--tx2)">${ch}</td>
+        <td colspan="6"></td>
+        ${MONTHS.map(m=>`<td class="nr" style="font-size:11px;color:var(--tx2)">${fmt(f[m])}</td>`).join('')}
+        <td></td><td></td>
+      </tr>`
+    ).join('');
+
+    const fcstSum=MONTHS.reduce((s,m)=>s+(p.totFcsts[m]||0),0);
+    return `
+      <tr style="cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none'">
+        <td class="L"><div class="pn">${p.product} <span style="font-size:10px;color:var(--tx2)">▼채널별</span></div><div class="pc">${p.master||p.code}</div></td>
+        ${p.acts.map(v=>`<td class="nr" style="color:var(--tx2)">${fmt(v)}</td>`).join('')}
+        <td class="nr" style="color:var(--tx2)">${fmt(Math.round(p.actAvg))}</td>
+        ${MONTHS.map(m=>`<td class="nr${m==='6'&&w?' warn':''}">${fmt(p.totFcsts[m])}</td>`).join('')}
+        <td class="nr" style="font-weight:600">${fmt(fcstSum)}</td>
+        <td><span class="badge ${statusMap[user]?.status==='확정'?'badge-done':'badge-wait'}">${statusMap[user]?.status||'미완료'}</span></td>
+      </tr>
+      <tbody style="display:none">${chDetail}</tbody>`;
+  }).join('');
+
+  document.getElementById('agg-t').innerHTML=`
+    <div class="tw"><table>
+      <thead><tr>
+        <th class="L">품목명</th>
+        <th>1월</th><th>2월</th><th>3월</th><th>4월</th><th>5월</th><th>월평균</th>
+        ${MONTHS.map(m=>`<th style="color:var(--ac2)">${m}월FCST</th>`).join('')}
+        <th>합계</th><th>상태</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+}
+
+// ── AGENDA ────────────────────────────────────────────────────
+function renderAgenda(el) {
+  const agenda=JSON.parse(localStorage.getItem('sop_ag')||'[]');
+  const today=new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'});
+  const byType={order:[],fcst:[],ops:[],np:[]};
+  agenda.forEach(a=>(byType[a.type]||byType.ops).push(a));
+  const sec=(type,title)=>`
+    <div style="margin-bottom:22px">
+      <div class="stitle">${title} <span class="cnt">${byType[type].length}건</span></div>
+      ${byType[type].length===0
+        ?`<div style="color:var(--tx2);font-size:13px">없음</div>`
+        :byType[type].map((a,i)=>`
+          <div class="ag-item">
+            <div class="ag-num">${i+1}</div>
+            <div class="ag-ct">
+              <div class="ag-tag ${tc(a.type)}">${tl(a.type)}</div>
+              <div class="ag-tit">${a.product}</div>
+              ${a.body?`<div class="ag-bod">${a.body}</div>`:''}
+              ${a.owner?`<div style="font-size:10px;color:var(--tx2);margin-top:3px">담당: ${a.owner}</div>`:''}
+            </div>
+            <button class="btn-del no-print" onclick="delAg(${agenda.indexOf(a)})">×</button>
+          </div>`).join('')
+      }
+    </div>`;
+
+  el.innerHTML=`
+    <div style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--bd)">
+        <div><div class="ttl">📌 주요 Agenda</div><div style="font-size:12px;color:var(--tx2);margin-top:2px">${today} · ${weekLabel} S&OP 회의</div></div>
+        <div style="display:flex;gap:8px" class="no-print">
+          <button class="btn-s" onclick="window.print()">🖨️ 인쇄</button>
+          <button class="btn-p" onclick="openMo('ag-mo')">+ 추가</button>
+        </div>
+      </div>
+      ${sec('order','🔴 발주 검토 품목')}
+      ${sec('fcst','🟡 포케스팅 검토 품목')}
+      ${sec('ops','🔵 운영 검토 품목')}
+      ${sec('np','🟢 신제품')}
+    </div>`;
+}
+
+function submitAg() {
+  const agenda=JSON.parse(localStorage.getItem('sop_ag')||'[]');
+  const product=document.getElementById('ag-prod').value.trim();
+  if (!product){toast('품목명을 입력하세요','err');return;}
+  agenda.push({type:document.getElementById('ag-type').value,product,body:document.getElementById('ag-body').value.trim(),owner:document.getElementById('ag-owner').value.trim()});
+  localStorage.setItem('sop_ag',JSON.stringify(agenda));
+  closeMo('ag-mo');
+  ['ag-prod','ag-body','ag-owner'].forEach(id=>document.getElementById(id).value='');
+  if(curTab==='agenda')renderAgenda(document.getElementById('ct'));
+  if(curTab==='dash')renderDash(document.getElementById('ct'));
+  toast('✅ 아젠다 추가됨','ok');
+}
+function qAg(f){
+  const agenda=JSON.parse(localStorage.getItem('sop_ag')||'[]');
+  agenda.push({type:f.type||'fcst',product:f.product,body:f.detail,owner:''});
+  localStorage.setItem('sop_ag',JSON.stringify(agenda));
+  toast('✅ 아젠다에 추가됨','ok');
+}
+function delAg(idx){
+  if(!confirm('삭제하시겠습니까?'))return;
+  const agenda=JSON.parse(localStorage.getItem('sop_ag')||'[]');
+  agenda.splice(idx,1);
+  localStorage.setItem('sop_ag',JSON.stringify(agenda));
+  renderAgenda(document.getElementById('ct'));
+}
+
+// ── PRODUCTS ──────────────────────────────────────────────────
+function renderProducts(el) {
+  el.innerHTML=`
+    <div class="th">
+      <div><div class="ttl">품목 관리</div><div class="tsub">추가/수정 시 모든 채널에 즉시 반영</div></div>
+      <button class="btn-p" onclick="openProdMo()">+ 품목 추가</button>
+    </div>
+    <div class="srch-row"><input type="text" placeholder="품목 검색..." oninput="filterProds(this.value)" id="prod-s"></div>
+    <div class="tw"><table>
+      <thead><tr><th class="L">품목명</th><th>마스터코드</th><th>코드</th><th>브랜드</th><th>등급</th><th>MOQ</th><th>사용기한</th><th class="no-print"></th></tr></thead>
+      <tbody id="prod-tbody">${prodRows(products)}</tbody>
+    </table></div>`;
+}
+function prodRows(list){
+  return list.map(p=>`
+    <tr>
+      <td><div class="pn">${p.product}</div></td>
+      <td class="nr">${p.master||''}</td>
+      <td class="nr">${p.code||''}</td>
+      <td>${p.brand}</td>
+      <td>${p.grade||''}</td>
+      <td class="nr">${fmt(p.moq)}</td>
+      <td>${p.expiry||''}</td>
+      <td class="no-print"><button class="btn-s" style="padding:4px 10px;font-size:11px" onclick="editProd('${p.master||p.code}')">수정</button></td>
+    </tr>`).join('');
+}
+function filterProds(v){
+  const list=v?products.filter(p=>p.product.toLowerCase().includes(v.toLowerCase())||(p.master||'').includes(v)):products;
+  document.getElementById('prod-tbody').innerHTML=prodRows(list);
+}
+let editingMaster=null;
+function openProdMo(){
+  editingMaster=null;
+  document.getElementById('prod-mo-title').textContent='품목 추가';
+  document.getElementById('p-del-btn').style.display='none';
+  ['p-master','p-code','p-product','p-seq','p-moq','p-expiry'].forEach(id=>document.getElementById(id).value='');
+  openMo('prod-mo');
+}
+function editProd(master){
+  const p=products.find(pr=>(pr.master||pr.code)===master);
+  if(!p)return;
+  editingMaster=master;
+  document.getElementById('prod-mo-title').textContent='품목 수정';
+  document.getElementById('p-del-btn').style.display='inline-block';
+  document.getElementById('p-brand').value=p.brand||'메디테라피';
+  document.getElementById('p-master').value=p.master||'';
+  document.getElementById('p-code').value=p.code||'';
+  document.getElementById('p-product').value=p.product||'';
+  document.getElementById('p-grade').value=p.grade||'A';
+  document.getElementById('p-seq').value=p.seq||'';
+  document.getElementById('p-moq').value=p.moq||0;
+  document.getElementById('p-expiry').value=p.expiry||'';
+  openMo('prod-mo');
+}
+async function submitProduct(){
+  const prod={
+    brand:document.getElementById('p-brand').value,
+    master:document.getElementById('p-master').value.trim(),
+    code:document.getElementById('p-code').value.trim(),
+    product:document.getElementById('p-product').value.trim(),
+    grade:document.getElementById('p-grade').value,
+    seq:document.getElementById('p-seq').value.trim(),
+    moq:+document.getElementById('p-moq').value||0,
+    expiry:document.getElementById('p-expiry').value.trim()
+  };
+  if(!prod.product){toast('품목명을 입력하세요','err');return;}
+  try {
+    let r;
+    if(editingMaster) r=await apiPost({action:'updateProduct',product:prod});
+    else r=await apiPost({action:'addProduct',product:prod});
+    if(r.error)throw new Error(r.error);
+    products=await api('getProducts');
+    products=Array.isArray(products)?products:[];
+    closeMo('prod-mo');
+    renderProducts(document.getElementById('ct'));
+    toast(editingMaster?'✅ 품목 수정됨':'✅ 품목 추가됨 — 모든 채널에 반영','ok');
+  } catch(e){toast('❌ '+e.message,'err');}
+}
+async function deleteProduct(){
+  if(!confirm('삭제하시겠습니까?'))return;
+  try{
+    const r=await apiPost({action:'deleteProduct',master:editingMaster});
+    if(r.error)throw new Error(r.error);
+    products=await api('getProducts');
+    products=Array.isArray(products)?products:[];
+    closeMo('prod-mo');
+    renderProducts(document.getElementById('ct'));
+    toast('✅ 품목 삭제됨','ok');
+  }catch(e){toast('❌ '+e.message,'err');}
+}
+
+// ── SETTINGS ──────────────────────────────────────────────────
+function renderSettings(el) {
+  el.innerHTML=`
+    <div class="th"><div class="ttl">설정</div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="sc">
+        <div class="sl" style="margin-bottom:14px">시스템 설정</div>
+        <div style="margin-bottom:10px"><span style="font-size:12px;color:var(--tx2)">입력 마감일</span><div style="font-size:15px;font-weight:600;margin-top:4px">${config.DEADLINE||'미설정'} ${config.DEADLINE_TIME||''}</div></div>
+        <div style="margin-bottom:10px"><span style="font-size:12px;color:var(--tx2)">현재 주차</span><div style="font-size:15px;font-weight:600;margin-top:4px">${weekLabel}</div></div>
+        <button class="btn-p" style="margin-top:8px" onclick="openCfgMo()">설정 변경</button>
+      </div>
+      <div class="sc">
+        <div class="sl" style="margin-bottom:14px">담당자 관리</div>
+        ${Object.entries(managers).map(([m,chs])=>`
+          <div style="padding:6px 0;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center">
+            <div><div style="font-size:13px;font-weight:500">${m}</div><div style="font-size:11px;color:var(--tx2)">${chs.join(', ')||'미배정'}</div></div>
+          </div>`).join('')}
+        <button class="btn-p" style="margin-top:12px" onclick="openMgrMo()">담당자 관리</button>
+      </div>
+    </div>`;
+}
+
+// CONFIG
+function openCfgMo(){
+  document.getElementById('cfg-deadline').value=config.DEADLINE||'';
+  document.getElementById('cfg-time').value=config.DEADLINE_TIME||'18:00';
+  document.getElementById('cfg-week').value=weekLabel;
+  openMo('cfg-mo');
+}
+async function submitConfig(){
+  const newWeek=document.getElementById('cfg-week').value.trim();
+  try{
+    const r=await apiPost({action:'saveConfig',config:{
+      DEADLINE:document.getElementById('cfg-deadline').value,
+      DEADLINE_TIME:document.getElementById('cfg-time').value,
+      CURRENT_WEEK:newWeek||weekLabel
+    }});
+    if(r.error)throw new Error(r.error);
+    config.DEADLINE=document.getElementById('cfg-deadline').value;
+    config.DEADLINE_TIME=document.getElementById('cfg-time').value;
+    if(newWeek){weekLabel=newWeek;document.getElementById('week-label').textContent=weekLabel;}
+    checkDeadline();
+    closeMo('cfg-mo');
+    toast('✅ 설정 저장됨','ok');
+    if(curTab==='settings')renderSettings(document.getElementById('ct'));
+  }catch(e){toast('❌ '+e.message,'err');}
+}
+
+// MANAGERS
+function openMgrMo(){buildMgrMo();openMo('mgr-mo');}
+function buildMgrMo(){
+  document.getElementById('mgr-list-mo').innerHTML=Object.entries(managers).map(([m,chs])=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bd);flex-wrap:wrap">
+      <div style="min-width:80px;font-size:13px;font-weight:500">${m}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;flex:1">
+        ${(chs||[]).map(ch=>`<span style="font-size:11px;padding:3px 8px;border-radius:12px;background:var(--sf2);border:1px solid var(--bd);display:inline-flex;align-items:center;gap:4px">${ch}<span style="cursor:pointer;color:var(--tx2)" onclick="rmCh('${m}','${ch}')">×</span></span>`).join('')||'<span style="font-size:11px;color:var(--tx2)">미배정</span>'}
+      </div>
+      <button style="font-size:11px;padding:3px 8px;border-radius:5px;background:none;border:1px solid var(--bd);color:var(--tx2);cursor:pointer" onclick="rmMgr('${m}')">삭제</button>
+    </div>`).join('');
+  document.getElementById('assign-mgr').innerHTML=Object.keys(managers).map(m=>`<option>${m}</option>`).join('');
+  document.getElementById('assign-ch').innerHTML=allChannels.concat(['라쿠텐','메디KR_자사몰','메디KR_외부몰','메디TW_자사몰','메디HK_자사몰','메디SG_자사몰','쇼피TW','쇼피MY','쇼피SG','쇼피PP','쇼피VN','쇼피파이US','아마존US','아마존AU','아마존UK','아마존DE','틱톡샵US','틱톡샵MY','올리브영','B2B','큐텐','라쿠텐JP','아마존JP']).filter((v,i,a)=>a.indexOf(v)===i).map(c=>`<option>${c}</option>`).join('');
+}
+async function addMgr(){
+  const name=document.getElementById('new-mgr-name').value.trim();
+  if(!name)return;
+  if(managers[name]){toast('이미 있는 담당자','err');return;}
+  managers[name]=[];
+  await apiPost({action:'saveManagers',managers});
+  document.getElementById('new-mgr-name').value='';
+  buildMgrMo();toast('✅ 담당자 추가됨','ok');
+}
+async function rmMgr(m){
+  if(!confirm(`${m} 삭제?`))return;
+  delete managers[m];
+  await apiPost({action:'saveManagers',managers});
+  buildMgrMo();
+}
+async function assignCh(){
+  const m=document.getElementById('assign-mgr').value;
+  const ch=document.getElementById('assign-ch').value;
+  if(!m||!ch)return;
+  if(!managers[m])managers[m]=[];
+  if(!managers[m].includes(ch))managers[m].push(ch);
+  allChannels=[...new Set(Object.values(managers).flat())];
+  await apiPost({action:'saveManagers',managers});
+  buildMgrMo();toast(`✅ ${m}에게 ${ch} 배정됨`,'ok');
+}
+async function rmCh(m,ch){
+  managers[m]=(managers[m]||[]).filter(c=>c!==ch);
+  allChannels=[...new Set(Object.values(managers).flat())];
+  await apiPost({action:'saveManagers',managers});
+  buildMgrMo();
+}
+async function closeMgr(){
+  closeMo('mgr-mo');
+  if(curTab==='settings')renderSettings(document.getElementById('ct'));
+}
+
+// ── MY ────────────────────────────────────────────────────────
+function renderMy(el) {
+  const chs=managers[user]||[];
+  const byChannel={};
+  const totals={};MONTHS.forEach(m=>totals[m]=0);
+
+  for(const ch of chs){
+    byChannel[ch]={};MONTHS.forEach(m=>byChannel[ch][m]=0);
+    for(const p of products){
+      const k=(p.master||p.code)+'|'+ch;
+      MONTHS.forEach(m=>{
+        const v=chg[k]?.[m]??fcstData[k]?.fcsts?.[m]??0;
+        byChannel[ch][m]+=v;
+        totals[m]+=v;
+      });
+    }
+  }
+  const s=statusMap[user];
+
+  el.innerHTML=`
+    <div class="ttl" style="margin-bottom:16px">${user}님 현황 — ${weekLabel}</div>
+    <div style="margin-bottom:14px">
+      <span class="badge ${s?.status==='확정'?'badge-done':hasAnyInput(user)?'badge-partial':'badge-wait'}">${s?.status||( hasAnyInput(user)?'입력 중':'대기 중')}</span>
+      ${s?.confirmedAt?`<span style="font-size:11px;color:var(--tx2);margin-left:8px">확정일시: ${s.confirmedAt}</span>`:''}
+    </div>
+    <div class="sg sg3" style="margin-bottom:16px">
+      ${['6','7','8'].map(m=>`<div class="sc"><div class="sl">${m}월 FCST 합계</div><div class="sv blu">${fmt(totals[m])}</div></div>`).join('')}
+    </div>
+    <div class="sg" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+      ${['9','10','11','12'].map(m=>`<div class="sc"><div class="sl">${m}월 FCST</div><div class="sv" style="font-size:20px;color:var(--tx2)">${fmt(totals[m])}</div></div>`).join('')}
+    </div>
+    <div class="stitle">채널별 6~12월 FCST</div>
+    <div class="tw"><table>
+      <thead><tr><th class="L">채널</th>${MONTHS.map(m=>`<th>${m}월</th>`).join('')}<th>합계</th></tr></thead>
+      <tbody>${chs.map(ch=>{
+        const sum=MONTHS.reduce((s,m)=>s+(byChannel[ch][m]||0),0);
+        return `<tr><td class="L" style="font-weight:500">${ch}</td>${MONTHS.map(m=>`<td class="nr">${fmt(byChannel[ch][m])}</td>`).join('')}<td class="nr" style="font-weight:600">${fmt(sum)}</td></tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+}
+
+// ── UTILS ─────────────────────────────────────────────────────
+function fmt(n){if(!n&&n!==0)return'-';const v=Math.round(n);return v===0?'-':v.toLocaleString('ko-KR');}
+function tc(t){return{order:'t-order',fcst:'t-fcst',ops:'t-ops',np:'t-np'}[t]||'t-ops';}
+function tl(t){return{order:'발주검토',fcst:'포케스팅',ops:'운영검토',np:'신제품'}[t]||t;}
+function openMo(id){document.getElementById(id).classList.add('on');}
+function closeMo(id){document.getElementById(id).classList.remove('on');}
+function toast(msg,type='ok'){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className=`toast on ${type}`;
+  setTimeout(()=>t.classList.remove('on'),3000);
+}
+
+// ── BOOT ─────────────────────────────────────────────────────
+(async()=>{
+  // 현재 주차 기본값 설정
+  const now=new Date();
+  weekLabel=`${String(now.getMonth()+1).padStart(2,'0')}.${String(now.getDate()).padStart(2,'0')}_FCST`;
+
+  const connected = await checkServer();
+  if (connected) {
+    await loadAll();
+    // 로컬 폴백 매니저 초기화 (GAS 연결 전)
+  } else {
+    // 오프라인 폴백: 로컬 저장된 담당자 사용
+    const lm=localStorage.getItem('sop_mgrs_local');
+    managers=lm?JSON.parse(lm):{Daphne:['라쿠텐'],Henry:['쇼피MY','쇼피PP','쇼피SG','쇼피TW','쇼피VN','아마존AU'],Jimmy:['메디KR_자사몰','메디KR_외부몰','쇼피파이US'],Leo:['메디HK_자사몰','메디SG_자사몰','메디TW_자사몰'],Ling:['메디TW_자사몰']};
+    allChannels=[...new Set(Object.values(managers).flat())];
+  }
+
+  // 담당자 선택 드롭다운
+  const mSel=document.getElementById('m-sel');
+  mSel.innerHTML='<option value="">-- 선택 --</option>'+Object.keys(managers).map(m=>`<option>${m}</option>`).join('');
+})();
+</script>
+</body>
+</html>
