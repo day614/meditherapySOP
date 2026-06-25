@@ -281,6 +281,7 @@ let weekLabel='', statusMap={};
 let fcstData={};   // key: master|channel → {acts, fcsts:{m:v}, weeks:{m:[w1..w4]}}
 let chg={};        // 미저장 변경사항
 let curTab=null, curCh=null;
+let stockData={}, stockLoaded=false;
 let isDeadlinePassed=false, isConfirmed=false;
 
 // ── API ───────────────────────────────────────────────────────
@@ -393,6 +394,7 @@ async function doLogin() {
   isConfirmed = statusMap[user]?.status === '확정';
 
   await loadFcstData();
+  loadStockData();
   buildTabs();
 }
 
@@ -445,6 +447,7 @@ function render(id) {
   else if (id==='products') renderProducts(el);
   else if (id==='settings') renderSettings(el);
   else if (id==='my') renderMy(el);
+  else if (id==='stock') renderStock(el);
 }
 
 // ── INPUT ─────────────────────────────────────────────────────
@@ -498,14 +501,24 @@ function renderInput(el) {
   drawInput();
 }
 
-function switchCh(ch, btn) {
+async function switchCh(ch, btn) {
+  // 변경사항 있으면 자동 저장
+  if (Object.keys(chg).length > 0) {
+    toast('💾 자동 저장 중...', 'ok');
+    await saveFcst();
+  }
   curCh = ch;
   document.querySelectorAll('#ch-tabs .ch-pill').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   drawInput();
 }
 
-function switchMonth(m, btn) {
+async function switchMonth(m, btn) {
+  // 변경사항 있으면 자동 저장
+  if (Object.keys(chg).length > 0) {
+    toast('💾 자동 저장 중...', 'ok');
+    await saveFcst();
+  }
   curMonth = m;
   document.querySelectorAll('#month-tabs .ch-pill').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
@@ -541,9 +554,12 @@ function drawInput(filter) {
         oninput="onWeekI(this)" min="0" ${locked?'disabled':''}></td>`;
     }).join('');
 
-    // 월계 (자동합산)
-    const savedMonthTotal = saved.fcsts?.[curMonth] ?? 0;
-    const displayTotal = Object.keys(chg).some(k=>k.startsWith(key+'_'+curMonth)) ? weekTotal : savedMonthTotal;
+    // 월계: 항상 현재 입력된 주차별 값의 합산으로 계산
+    // savedWeeks 기반 합산 (저장된 주차값 합계)
+    const savedWeekTotal = (savedWeeks).reduce((s,v)=>s+(+v||0), 0);
+    // chg에 이 월 변경사항 있으면 weekTotal, 없으면 savedWeeks 합산
+    const hasChgThisMonth = Object.keys(chg).some(k=>k.startsWith(key+'_'+curMonth));
+    const displayTotal = hasChgThisMonth ? weekTotal : savedWeekTotal;
 
     return `<tr>
       <td style="min-width:190px;position:sticky;left:0;background:var(--sf)">
@@ -559,8 +575,12 @@ function drawInput(filter) {
   const weekHeaders = ws.weeks.map(w=>`<th style="color:var(--ac2);font-size:11px;white-space:pre-line;min-width:72px">${w.label}</th>`).join('');
 
   document.getElementById('input-tbl').innerHTML = `
-    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#1e40af">
-      💡 <strong>${ws.label}</strong> 주차별 수량을 입력하면 <strong>${ws.label}계</strong>가 자동으로 합산돼요. 입력 후 반드시 <strong>저장</strong> 버튼을 누르세요.
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:12px;color:#1e40af;line-height:1.8">
+      📝 <strong>${ws.label} 포케스팅 입력 방법</strong><br>
+      • 각 주차 칸에 해당 주에 판매 예상되는 수량을 입력하세요<br>
+      • 입력하면 <strong>${ws.label}계</strong>가 오른쪽에 자동으로 합산돼요<br>
+      • <strong style="color:#dc2626">⚠️ 다른 월이나 채널로 이동하면 자동 저장됩니다</strong> — 수량 입력 후 바로 이동하셔도 돼요!<br>
+      • 모든 월 입력 완료 후 <strong>✅ 입력 확정</strong> 버튼을 꼭 눌러주세요
     </div>
     <div class="tw"><table>
       <thead>
@@ -1162,11 +1182,14 @@ function renderMy(el) {
       <span style="font-size:12px;color:var(--tx2)">담당 채널: <strong style="color:var(--tx)">${chs.join(', ')||'미배정'}</strong></span>
     </div>
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#1e40af;line-height:1.9">
-      <div style="font-weight:700;margin-bottom:6px">📌 수치 안내</div>
-      <div>• <strong>6~8월 FCST 합계</strong> — 내가 입력한 담당 채널의 해당 월 판매 예상 수량 합계예요.</div>
-      <div>• <strong>9~12월 FCST</strong> — 현재 시트에 저장된 수량이에요. 변경이 필요하면 ✏️ 포케스팅 입력 탭에서 수정하세요.</div>
-      <div>• <strong>채널별 표</strong> — 담당 채널별로 월별 수량을 확인할 수 있어요.</div>
-      <div style="margin-top:8px;font-weight:700;color:#1d4ed8">✅ 입력 완료 후 반드시 포케스팅 입력 탭에서 <u>입력 확정</u> 버튼을 눌러주세요!</div>
+      <div style="font-weight:700;margin-bottom:8px">📌 이 화면은 뭔가요?</div>
+      <div>• <strong>6~8월 숫자</strong> — 내가 입력한 포케스팅 수량의 채널 합계예요</div>
+      <div>• <strong>9~12월 숫자</strong> — 저장된 포케스팅 수량이에요. 수정하려면 왼쪽 <strong>포케스팅 입력</strong> 탭에서 해당 월을 선택해 수정하세요</div>
+      <div>• <strong>아래 채널별 표</strong> — 내가 담당한 채널별로 각각 얼마를 입력했는지 확인할 수 있어요</div>
+      <div style="margin-top:10px;padding:8px 12px;background:#dbeafe;border-radius:6px;font-weight:700;color:#1d4ed8">
+        ✅ 모든 월 입력이 끝났으면 <u>포케스팅 입력 탭 → 입력 확정</u> 버튼을 눌러주세요!<br>
+        확정 전까지는 관리자에게 "입력 중"으로 표시됩니다
+      </div>
     </div>
     <div class="sg sg3" style="margin-bottom:14px">
       ${['6','7','8'].map(m=>`<div class="sc"><div class="sl">${m}월 FCST 합계</div><div class="sv blu">${fmt(totals[m])}</div><div style="font-size:11px;color:var(--tx2);margin-top:5px">담당 채널 전체 합산 · ${m}월 판매 예상 수량</div></div>`).join('')}
@@ -1182,6 +1205,162 @@ function renderMy(el) {
         return `<tr><td class="L" style="font-weight:500">${ch}</td>${MONTHS.map(m=>`<td class="nr">${fmt(byChannel[ch][m])}</td>`).join('')}<td class="nr" style="font-weight:600">${fmt(sum)}</td></tr>`;
       }).join('')}</tbody>
     </table></div>`;
+}
+
+
+// ── STOCK DATA ────────────────────────────────────────────────
+async function loadStockData() {
+  try {
+    const r = await api('getStock');
+    if (r && !r.error) { stockData = r; stockLoaded = true; }
+  } catch(e) { console.warn('재고 로드 실패:', e); }
+}
+
+// ── STOCK SIMULATION ──────────────────────────────────────────
+async function renderStock(el) {
+  el.innerHTML = `<div class="loading"><div class="spin"></div><span>재고 데이터 로딩 중...</span></div>`;
+  if (!stockLoaded) await loadStockData();
+  el.innerHTML = `
+    <div class="th">
+      <div><div class="ttl">📦 재고 시뮬레이션</div>
+      <div class="tsub">재고시트 주차별 재고 − 해외 FCST · 셀에 마우스 올리면 상세 확인</div></div>
+      <button onclick="loadStockData().then(()=>renderStock(document.getElementById('ct')))"
+        style="background:none;border:1px solid var(--bd);color:var(--tx2);padding:7px 14px;border-radius:7px;font-size:12px;cursor:pointer">🔄 새로고침</button>
+    </div>
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:#92400e;line-height:1.8">
+      <strong>계산 방식:</strong> 각 주차 잔여재고 = 재고시트 주차 시작일 재고 (국내 수요예측 이미 반영) − 해외 채널 FCST 합계<br>
+      <strong style="color:#dc2626">🔴 빨간색</strong> = 해외 FCST 출고 후 재고 마이너스 예상 &nbsp;|&nbsp;
+      <strong style="color:#d97706">🟡 노란색</strong> = 해외 FCST의 2배 미만 잔여 (주의)
+    </div>
+    <div class="srch-row">
+      <input type="text" placeholder="품목 검색..." oninput="filterStock(this.value)" id="stock-srch">
+      <select id="stock-brand" onchange="filterStock(document.getElementById('stock-srch').value)"
+        style="background:var(--sf);border:1px solid var(--bd);color:var(--tx);padding:8px 12px;border-radius:8px;font-size:13px;outline:none">
+        <option value="">전체 브랜드</option><option value="메디테라피">메디테라피</option><option value="히디프">히디프</option>
+      </select>
+      <select id="stock-filter" onchange="filterStock(document.getElementById('stock-srch').value)"
+        style="background:var(--sf);border:1px solid var(--bd);color:var(--tx);padding:8px 12px;border-radius:8px;font-size:13px;outline:none">
+        <option value="">전체</option><option value="danger">🔴 부족 예상만</option><option value="warning">🟡 주의 포함</option>
+      </select>
+    </div>
+    <div id="stock-tbl"></div>
+  `;
+  drawStockTable();
+}
+
+function drawStockTable(filter) {
+  const q = (filter!==undefined?filter:(document.getElementById('stock-srch')?.value||'')).toLowerCase();
+  const brand = document.getElementById('stock-brand')?.value||'';
+  const filterMode = document.getElementById('stock-filter')?.value||'';
+
+  const W_KEYS = {
+    '6':['W1','W2','W3','W4'],'7':['W1','W2','W3','W4','W5'],
+    '8':['W1','W2','W3','W4'],'9':['W1','W2','W3','W4'],
+    '10':['W1','W2','W3','W4'],'11':['W1','W2','W3','W4'],'12':['W1','W2','W3','W4'],
+  };
+
+  const rows = products.map(p => {
+    const master = p.master||p.code;
+    const sd = stockData[master]||{stock:0,weeks:[]};
+
+    // 해외 FCST 주차별 합산
+    const fcstByWeek = {};
+    for (const ch of allChannels) {
+      const k = master+'|'+ch;
+      const saved = fcstData[k]||{};
+      for (const m of MONTHS) {
+        const wks = WEEK_STRUCTURE[m]?.weeks||[];
+        wks.forEach((w,i)=>{
+          const wkey = `${m}_W${w.n}`;
+          const wkkey = `${k}_${m}_w${w.n}`;
+          const savedW = saved.weeks?.[m]?.[i]??0;
+          fcstByWeek[wkey] = (fcstByWeek[wkey]||0) + (chg[wkkey]??savedW??0);
+        });
+      }
+    }
+
+    // 주차별 잔여재고: 재고시트 주차시작일 재고 - 해외FCST
+    let hasDanger=false, hasWarning=false;
+    const weekSim=[];
+    const allWKeys=[];
+    for (const m of MONTHS) (W_KEYS[m]||[]).forEach(wk=>allWKeys.push(`${m}_${wk}`));
+
+    for (const wkey of allWKeys) {
+      const sw = sd.weeks?.find(w=>w.key===wkey)||{};
+      const stockAtStart = sw.stock_at_start??sd.stock??0;
+      const overseas = fcstByWeek[wkey]||0;
+      const remaining = stockAtStart - overseas;
+      let status='ok';
+      if (remaining<0){status='danger';hasDanger=true;}
+      else if (overseas>0&&remaining<overseas*2){status='warning';hasWarning=true;}
+      weekSim.push({wkey,stockAtStart:Math.round(stockAtStart),overseas,running:Math.round(remaining),status});
+    }
+    return {p,master,sd,weekSim,hasDanger,hasWarning};
+  });
+
+  let filtered=rows;
+  if (q) filtered=filtered.filter(r=>r.p.product.toLowerCase().includes(q)||(r.master||'').includes(q));
+  if (brand) filtered=filtered.filter(r=>r.p.brand===brand);
+  if (filterMode==='danger') filtered=filtered.filter(r=>r.hasDanger);
+  if (filterMode==='warning') filtered=filtered.filter(r=>r.hasDanger||r.hasWarning);
+  window._stockRows=rows;
+
+  const allWKeys2=[];
+  for (const m of MONTHS) (W_KEYS[m]||[]).forEach(wk=>allWKeys2.push({m,wk,key:`${m}_${wk}`}));
+
+  const thCols = allWKeys2.map(w=>`<th style="color:var(--ac2);font-size:11px;min-width:72px">${w.m}월<br>${w.wk}</th>`).join('');
+
+  const tableRows = filtered.map(({p,master,sd,weekSim,hasDanger,hasWarning})=>{
+    const statusIcon = hasDanger?'🔴':hasWarning?'🟡':'🟢';
+    const cells = weekSim.map(w=>{
+      const bg = w.status==='danger'?'background:#fee2e2;color:#dc2626;font-weight:700'
+        :w.status==='warning'?'background:#fffbeb;color:#d97706;font-weight:600':'color:var(--tx)';
+      const tip = `재고시트: ${fmt(w.stockAtStart)} / 해외FCST: ${fmt(w.overseas)} / 잔여: ${fmt(w.running)}`;
+      return `<td class="nr" style="font-size:12px;${bg}" title="${tip}">${w.running<0?'▼'+fmt(Math.abs(w.running)):fmt(w.running)}</td>`;
+    }).join('');
+    return `<tr>
+      <td style="position:sticky;left:0;background:var(--sf);min-width:190px">
+        <div style="font-size:10px;margin-bottom:2px">${statusIcon} ${p.brand}</div>
+        <div style="font-weight:500;font-size:13px">${p.product}</div>
+        <div style="font-size:10px;color:var(--tx2)">${master}</div>
+      </td>
+      <td class="nr" style="font-weight:700;font-size:14px;color:var(--ac)">${fmt(sd.stock)}</td>
+      ${cells}
+      ${hasDanger?`<td><button style="font-size:10px;padding:3px 8px;border-radius:5px;background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.3);color:var(--red);cursor:pointer;white-space:nowrap" onclick="addStockAgenda('${master}','${p.product.replace(/'/g,'')}')">아젠다↑</button></td>`:'<td></td>'}
+    </tr>`;
+  }).join('');
+
+  document.getElementById('stock-tbl').innerHTML = !filtered.length
+    ? `<div style="text-align:center;padding:40px;color:var(--tx2)">해당 조건의 품목 없음</div>`
+    : `<div class="tw"><table>
+        <thead>
+          <tr>
+            <th style="text-align:left;position:sticky;left:0;background:var(--sf2);min-width:190px">품목명</th>
+            <th style="color:var(--grn)">현재고</th>${thCols}<th></th>
+          </tr>
+          <tr style="font-size:9px;color:var(--tx2)">
+            <th style="position:sticky;left:0;background:var(--sf2)">국내수요예측 반영 후 잔여재고</th>
+            <th></th>
+            ${allWKeys2.map(()=>'<th>재고시트재고<br>−해외FCST</th>').join('')}<th></th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table></div>
+      <div style="margin-top:10px;font-size:12px;color:var(--tx2)">
+        총 ${filtered.length}개 품목 | 🔴 부족: ${filtered.filter(r=>r.hasDanger).length}개 | 🟡 주의: ${filtered.filter(r=>!r.hasDanger&&r.hasWarning).length}개
+      </div>`;
+}
+
+function filterStock(v){drawStockTable(v);}
+
+function addStockAgenda(master,product){
+  const row=window._stockRows?.find(r=>r.master===master);
+  if(!row)return;
+  const fd=row.weekSim.find(w=>w.status==='danger');
+  const agenda=JSON.parse(localStorage.getItem('sop_ag')||'[]');
+  agenda.push({type:'order',product,body:`재고 부족 예상 — ${fd?.wkey||''} 기준 해외FCST ${fmt(fd?.overseas||0)} 출고 후 ${fmt(Math.abs(fd?.running||0))} 부족`,owner:''});
+  localStorage.setItem('sop_ag',JSON.stringify(agenda));
+  toast('✅ 아젠다 추가됨','ok');
 }
 
 // ── UTILS ─────────────────────────────────────────────────────
