@@ -285,10 +285,18 @@ let stockData={}, stockLoaded=false;
 let isDeadlinePassed=false, isConfirmed=false;
 
 // ── API ───────────────────────────────────────────────────────
+const _apiCache = {};
 async function api(action, params={}) {
   const url = GAS_URL + '?action=' + action + Object.entries(params).map(([k,v])=>`&${k}=${encodeURIComponent(v)}`).join('');
+  // getStock, getFcst는 캐시 사용 (새로고침 버튼으로만 갱신)
+  if (_apiCache[url]) return _apiCache[url];
   const r = await fetch(url);
-  return r.json();
+  const data = await r.json();
+  if (!data.error) _apiCache[url] = data;
+  return data;
+}
+function clearApiCache(action) {
+  Object.keys(_apiCache).forEach(k => { if (k.includes('action='+action)) delete _apiCache[k]; });
 }
 async function apiPost(body) {
   const r = await fetch(GAS_URL, { method:'POST', body: JSON.stringify(body) });
@@ -306,6 +314,10 @@ async function checkServer() {
     }
     const cfg = await api('getConfig');
     if (cfg.error) throw new Error(cfg.error);
+    // 서버 확인하면서 받은 config 바로 캐싱 (loadAll에서 중복 호출 방지)
+    config = cfg;
+    checkDeadline();
+    weekLabel = config.CURRENT_WEEK || weekLabel;
     el.textContent = '✅ 서버 연결됨';
     el.className = 'gas-status gas-ok';
     return true;
@@ -317,12 +329,17 @@ async function checkServer() {
 }
 
 async function loadAll() {
-  const [cfg, prods, mgrs, status] = await Promise.all([
-    api('getConfig'),
+  // config는 checkServer에서 이미 받았으면 재사용, 아니면 포함
+  const calls = [
     api('getProducts'),
     api('getManagers'),
     api('getStatus', {week: weekLabel})
-  ]);
+  ];
+  // config 아직 없으면 함께 요청
+  if (!config.ADMIN_PIN) calls.unshift(api('getConfig'));
+  else calls.unshift(Promise.resolve(config));
+
+  const [cfg, prods, mgrs, status] = await Promise.all(calls);
   config = cfg;
   products = Array.isArray(prods) ? prods : [];
   managers = mgrs || {};
@@ -393,8 +410,15 @@ async function doLogin() {
   // 확정 상태 체크
   isConfirmed = statusMap[user]?.status === '확정';
 
-  await loadFcstData();
-  loadStockData();
+  // 로그인 버튼 로딩 표시
+  const loginBtn = document.querySelector('.btn-login');
+  if (loginBtn) { loginBtn.textContent = '로딩 중...'; loginBtn.disabled = true; }
+
+  // loadFcstData + loadStockData 병렬 실행
+  await Promise.all([
+    loadFcstData(),
+    loadStockData()
+  ]);
   buildTabs();
 }
 
@@ -704,6 +728,7 @@ async function saveFcst() {
     document.querySelectorAll('.fi').forEach(i=>i.classList.remove('ch'));
     document.getElementById('sbar').classList.remove('on');
     document.getElementById('btn-confirm').disabled = false;
+    clearApiCache('getFcst'); // 저장 후 fcst 캐시 무효화
     toast(`✅ 저장 완료 (${r.updated||0}건 수정, ${r.appended||0}건 추가)`,'ok');
   } catch(e) {
     toast('❌ 저장 실패: '+e.message,'err');
