@@ -393,7 +393,6 @@ async function doLogin() {
   isConfirmed = statusMap[user]?.status === '확정';
 
   await loadFcstData();
-  loadStockData(); // 비동기로 재고 데이터 미리 로딩
   buildTabs();
 }
 
@@ -405,17 +404,6 @@ function doLogout() {
 }
 
 // ── FCST DATA ─────────────────────────────────────────────────
-// 재고 데이터 캐시
-let stockData = {};
-let stockLoaded = false;
-
-async function loadStockData() {
-  try {
-    const r = await api('getStock');
-    if (r && !r.error) { stockData = r; stockLoaded = true; }
-  } catch(e) { console.warn('재고 데이터 로드 실패:', e); }
-}
-
 async function loadFcstData() {
   const result = await api('getFcst', {week: weekLabel});
   fcstData = {};
@@ -436,7 +424,7 @@ async function loadFcstData() {
 function buildTabs() {
   const tabs = role==='admin'
     ? [{id:'dash',l:'📊 대시보드'},{id:'agg',l:'📋 전체 집계'},{id:'agenda',l:'📌 주요 Agenda'},{id:'input',l:'✏️ 포케스팅 입력'},{id:'products',l:'📦 품목 관리'},{id:'settings',l:'⚙️ 설정'}]
-    : [{id:'input',l:'✏️ 포케스팅 입력'},{id:'my',l:'📈 내 현황'},{id:'stock',l:'📦 재고 시뮬레이션'}];
+    : [{id:'input',l:'✏️ 포케스팅 입력'},{id:'my',l:'📈 내 현황'}];
   document.getElementById('tabs').innerHTML = tabs.map((t,i)=>
     `<button class="tab${i===0?' on':''}" onclick="sw('${t.id}',this)">${t.l}</button>`
   ).join('');
@@ -457,7 +445,6 @@ function render(id) {
   else if (id==='products') renderProducts(el);
   else if (id==='settings') renderSettings(el);
   else if (id==='my') renderMy(el);
-  else if (id==='stock') renderStock(el);
 }
 
 // ── INPUT ─────────────────────────────────────────────────────
@@ -1195,211 +1182,6 @@ function renderMy(el) {
         return `<tr><td class="L" style="font-weight:500">${ch}</td>${MONTHS.map(m=>`<td class="nr">${fmt(byChannel[ch][m])}</td>`).join('')}<td class="nr" style="font-weight:600">${fmt(sum)}</td></tr>`;
       }).join('')}</tbody>
     </table></div>`;
-}
-
-
-// ── STOCK SIMULATION ─────────────────────────────────────────
-async function renderStock(el) {
-  el.innerHTML = `<div class="loading"><div class="spin"></div><span>재고 데이터 로딩 중...</span></div>`;
-  if (!stockLoaded) await loadStockData();
-
-  const srch = document.createElement('div');
-  el.innerHTML = `
-    <div class="th">
-      <div>
-        <div class="ttl">📦 재고 시뮬레이션</div>
-        <div class="tsub">현재고 기준 · 국내 수요예측 + 해외 FCST 차감 · 주차별 잔여재고 예측</div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button onclick="loadStockData().then(()=>renderStock(document.getElementById('ct')))"
-          style="background:none;border:1px solid var(--bd);color:var(--tx2);padding:7px 14px;border-radius:7px;font-size:12px;cursor:pointer">🔄 새로고침</button>
-      </div>
-    </div>
-
-    <!-- 안내 -->
-    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;margin-bottom:18px;font-size:12px;color:#92400e;line-height:1.8">
-      <strong>계산 방식:</strong> 잔여재고 = 현재고 + 입고예정 − 국내 수요예측 누계 − 해외 FCST 누계 (영업 입력값)<br>
-      <strong style="color:#dc2626">🔴 빨간색</strong> = 해당 주차에 재고 부족 예상 &nbsp;|&nbsp; <strong style="color:#d97706">🟡 노란색</strong> = 재고 2주 이내 소진 예상
-    </div>
-
-    <div class="srch-row">
-      <input type="text" placeholder="품목 검색..." oninput="filterStock(this.value)" id="stock-srch">
-      <select id="stock-brand" onchange="filterStock(document.getElementById('stock-srch').value)"
-        style="background:var(--sf);border:1px solid var(--bd);color:var(--tx);padding:8px 12px;border-radius:8px;font-size:13px;outline:none">
-        <option value="">전체 브랜드</option>
-        <option value="메디테라피">메디테라피</option>
-        <option value="히디프">히디프</option>
-      </select>
-      <select id="stock-filter" onchange="filterStock(document.getElementById('stock-srch').value)"
-        style="background:var(--sf);border:1px solid var(--bd);color:var(--tx);padding:8px 12px;border-radius:8px;font-size:13px;outline:none">
-        <option value="">전체</option>
-        <option value="danger">🔴 부족 예상만</option>
-        <option value="warning">🟡 주의 포함</option>
-      </select>
-    </div>
-    <div id="stock-tbl"></div>
-  `;
-  drawStockTable();
-}
-
-function drawStockTable(filter) {
-  const q = (filter !== undefined ? filter : (document.getElementById('stock-srch')?.value || '')).toLowerCase();
-  const brand = document.getElementById('stock-brand')?.value || '';
-  const filterMode = document.getElementById('stock-filter')?.value || '';
-
-  // 마스터코드 기준으로 FCST 합산
-  const MONTHS = ['6','7','8','9','10','11','12'];
-  const W_KEYS = {
-    '6':['W1','W2','W3','W4'],
-    '7':['W1','W2','W3','W4','W5'],
-    '8':['W1','W2','W3','W4'],
-    '9':['W1','W2','W3','W4'],
-    '10':['W1','W2','W3','W4'],
-    '11':['W1','W2','W3','W4'],
-    '12':['W1','W2','W3','W4'],
-  };
-
-  // 품목별 집계
-  const rows = products.map(p => {
-    const master = p.master || p.code;
-    const sd = stockData[master] || { stock: 0, weeks: [] };
-
-    // 채널 합산 FCST (주차별)
-    const fcstByWeekKey = {};
-    for (const ch of allChannels) {
-      const k = master + '|' + ch;
-      const saved = fcstData[k] || {};
-      for (const m of MONTHS) {
-        const wks = WEEK_STRUCTURE[m]?.weeks || [];
-        wks.forEach((w, i) => {
-          const wkey = `${m}_W${w.n}`;
-          const wkkey = `${k}_${m}_w${w.n}`;
-          const savedW = saved.weeks?.[m]?.[i] ?? 0;
-          const v = chg[wkkey] ?? savedW;
-          fcstByWeekKey[wkey] = (fcstByWeekKey[wkey] || 0) + (+v || 0);
-        });
-      }
-    }
-
-    // 주차별 잔여재고 시뮬레이션
-    let running = sd.stock;
-    let hasDanger = false, hasWarning = false;
-    const weekSim = [];
-    let allWeekKeys = [];
-    for (const m of MONTHS) {
-      (W_KEYS[m] || []).forEach(wk => allWeekKeys.push(`${m}_${wk}`));
-    }
-
-    for (const wkey of allWeekKeys) {
-      const stockWeek = sd.weeks?.find(w => w.key === wkey) || {};
-      const domestic = stockWeek.domestic || 0;
-      const incoming = stockWeek.incoming || 0;
-      const overseas = fcstByWeekKey[wkey] || 0;
-      running = running + incoming - domestic - overseas;
-
-      let status = 'ok';
-      if (running < 0) { status = 'danger'; hasDanger = true; }
-      else if (running < (overseas + domestic) * 2) { status = 'warning'; hasWarning = true; }
-
-      weekSim.push({ wkey, running: Math.round(running), incoming, domestic, overseas, status });
-    }
-
-    return { p, master, sd, weekSim, hasDanger, hasWarning };
-  });
-
-  // 필터
-  let filtered = rows;
-  if (q) filtered = filtered.filter(r => r.p.product.toLowerCase().includes(q) || r.master.includes(q));
-  if (brand) filtered = filtered.filter(r => r.p.brand === brand);
-  if (filterMode === 'danger') filtered = filtered.filter(r => r.hasDanger);
-  if (filterMode === 'warning') filtered = filtered.filter(r => r.hasDanger || r.hasWarning);
-
-  window._stockRows = rows; // 아젠다 추가용
-
-  if (!filtered.length) {
-    document.getElementById('stock-tbl').innerHTML = `<div style="text-align:center;padding:40px;color:var(--tx2)">해당 조건의 품목 없음</div>`;
-    return;
-  }
-
-  // 테이블 헤더: 주차별
-  const allWeekKeys2 = [];
-  const MONTHS2 = ['6','7','8','9','10','11','12'];
-  for (const m of MONTHS2) {
-    (W_KEYS[m]||[]).forEach(wk => allWeekKeys2.push({m, wk, key:`${m}_${wk}`}));
-  }
-
-  const thCols = allWeekKeys2.map(w =>
-    `<th style="color:var(--ac2);font-size:11px;min-width:68px">${w.m}월<br>${w.wk}</th>`
-  ).join('');
-
-  const tableRows = filtered.map(({p, master, sd, weekSim, hasDanger, hasWarning}) => {
-    const statusIcon = hasDanger ? '🔴' : hasWarning ? '🟡' : '🟢';
-    const weekCells = weekSim.map(w => {
-      const bg = w.status === 'danger'
-        ? 'background:#fee2e2;color:#dc2626;font-weight:700'
-        : w.status === 'warning'
-        ? 'background:#fffbeb;color:#d97706;font-weight:600'
-        : 'color:var(--tx)';
-      return `<td class="nr" style="font-size:12px;${bg}">${w.running < 0 ? '▼'+fmt(Math.abs(w.running)) : fmt(w.running)}</td>`;
-    }).join('');
-
-    return `<tr>
-      <td style="position:sticky;left:0;background:var(--sf);min-width:180px">
-        <div style="font-size:11px;margin-bottom:2px">${statusIcon} ${p.brand}</div>
-        <div style="font-weight:500;font-size:13px">${p.product}</div>
-        <div style="font-size:10px;color:var(--tx2)">${master}</div>
-      </td>
-      <td class="nr" style="font-weight:700;font-size:14px;color:var(--ac)">${fmt(sd.stock)}</td>
-      ${weekCells}
-      ${hasDanger ? `<td><button style="font-size:10px;padding:3px 8px;border-radius:5px;background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.3);color:var(--red);cursor:pointer;white-space:nowrap" onclick="addStockAgenda('${master}','${p.product.replace(/'/g,'')}')">아젠다↑</button></td>` : '<td></td>'}
-    </tr>`;
-  }).join('');
-
-  document.getElementById('stock-tbl').innerHTML = `
-    <div class="tw">
-      <table>
-        <thead>
-          <tr>
-            <th style="text-align:left;position:sticky;left:0;background:var(--sf2);min-width:180px">품목명</th>
-            <th style="color:var(--grn)">현재고</th>
-            ${thCols}
-            <th></th>
-          </tr>
-          <tr style="font-size:10px;color:var(--tx2)">
-            <th style="position:sticky;left:0;background:var(--sf2)">※ 수치 = 잔여재고 예측</th>
-            <th></th>
-            ${allWeekKeys2.map(w => {
-              const sw = w.key;
-              return `<th style="font-size:9px;color:var(--tx2)">국내+해외<br>차감후</th>`;
-            }).join('')}
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>${tableRows}</tbody>
-      </table>
-    </div>
-    <div style="margin-top:12px;font-size:12px;color:var(--tx2)">
-      총 ${filtered.length}개 품목 표시 | 🔴 부족: ${filtered.filter(r=>r.hasDanger).length}개 | 🟡 주의: ${filtered.filter(r=>!r.hasDanger&&r.hasWarning).length}개
-    </div>
-  `;
-}
-
-function filterStock(v) { drawStockTable(v); }
-
-function addStockAgenda(master, product) {
-  const row = window._stockRows?.find(r => r.master === master);
-  if (!row) return;
-  const firstDanger = row.weekSim.find(w => w.status === 'danger');
-  const shortage = firstDanger ? Math.abs(firstDanger.running) : 0;
-  const agenda = JSON.parse(localStorage.getItem('sop_ag') || '[]');
-  agenda.push({
-    type: 'order',
-    product: product,
-    body: `재고 부족 예상 — ${firstDanger?.wkey || ''} 기준 ${fmt(shortage)}개 부족. 발주 또는 FCST 조정 검토 필요`,
-    owner: ''
-  });
-  localStorage.setItem('sop_ag', JSON.stringify(agenda));
-  toast('✅ 아젠다 추가됨', 'ok');
 }
 
 // ── UTILS ─────────────────────────────────────────────────────
