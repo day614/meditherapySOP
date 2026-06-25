@@ -425,8 +425,8 @@ async function loadFcstData() {
 // ── TABS ─────────────────────────────────────────────────────
 function buildTabs() {
   const tabs = role==='admin'
-    ? [{id:'dash',l:'📊 대시보드'},{id:'agg',l:'📋 전체 집계'},{id:'agenda',l:'📌 주요 Agenda'},{id:'input',l:'✏️ 포케스팅 입력'},{id:'products',l:'📦 품목 관리'},{id:'settings',l:'⚙️ 설정'}]
-    : [{id:'input',l:'✏️ 포케스팅 입력'},{id:'my',l:'📈 내 현황'}];
+    ? [{id:'dash',l:'📊 대시보드'},{id:'stock',l:'📦 재고 시뮬레이션'},{id:'agg',l:'📋 전체 집계'},{id:'agenda',l:'📌 주요 Agenda'},{id:'input',l:'✏️ 포케스팅 입력'},{id:'products',l:'📦 품목 관리'},{id:'settings',l:'⚙️ 설정'}]
+    : [{id:'input',l:'✏️ 포케스팅 입력'},{id:'stock',l:'📦 재고 시뮬레이션'},{id:'my',l:'📈 내 현황'}];
   document.getElementById('tabs').innerHTML = tabs.map((t,i)=>
     `<button class="tab${i===0?' on':''}" onclick="sw('${t.id}',this)">${t.l}</button>`
   ).join('');
