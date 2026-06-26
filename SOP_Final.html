@@ -154,6 +154,9 @@ tr:hover td{background:rgba(108,123,255,.03)}
 .th-sticky-2{position:sticky!important;left:200px!important;z-index:12!important;background:var(--sf2)!important;border-right:2px solid var(--bd)!important}
 .stock-tbl-wrap tr:hover .col-sticky-1,
 .stock-tbl-wrap tr:hover .col-sticky-2{background:var(--sf2)!important}
+/* 신제품 배지 */
+.np-badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700;background:rgba(52,211,153,.15);color:#059669;margin-bottom:3px;letter-spacing:.3px}
+.fi-disabled{width:78px;background:var(--sf2);border:1px dashed var(--bd);color:var(--tx2);padding:5px 7px;border-radius:6px;font-size:12px;text-align:center;opacity:.45;cursor:not-allowed;display:inline-block}
 /* PRINT */
 @media print{.topbar,.tabs,.sbar,.btn-del,.btn-ag,.btn-p,.btn-s,.no-print{display:none!important}.ct{padding:0}}
 @media(max-width:768px){.sg4{grid-template-columns:repeat(2,1fr)}.ct{padding:12px}}
@@ -236,6 +239,8 @@ tr:hover td{background:rgba(108,123,255,.03)}
     <label>차수</label><input id="p-seq" placeholder="예: 1차">
     <label>MOQ</label><input id="p-moq" type="number" placeholder="0">
     <label>사용기한</label><input id="p-expiry" placeholder="예: 36M">
+    <label>🆕 초도 입고 예정일 <span style="color:var(--tx2);font-weight:400">(신제품인 경우 입력 — 이 날짜 이전 주차는 포케스팅 입력 불가)</span></label>
+    <input type="date" id="p-first-incoming" placeholder="">
     <div class="mbtn">
       <button class="btn-s" onclick="closeMo('prod-mo')">취소</button>
       <button class="btn-danger" id="p-del-btn" onclick="deleteProduct()" style="display:none">삭제</button>
@@ -564,7 +569,38 @@ async function switchMonth(m, btn) {
 function drawInput(filter) {
   const locked = isDeadlinePassed || isConfirmed;
   const q = (filter!==undefined?filter:(document.getElementById('srch')?.value||'')).toLowerCase();
-  const list = products.filter(p=>!q||p.product.toLowerCase().includes(q)||(p.master||'').includes(q));
+  const today = new Date();
+
+  // 신제품 판별 함수: 등록일로부터 30일 이내
+  const isNewProduct = (p) => {
+    if (!p.regDate) return false;
+    const reg = new Date(p.regDate);
+    return (today - reg) / (1000*60*60*24) <= 30;
+  };
+
+  // 초도입고일 기준 주차 비활성화 판별
+  const isWeekBeforeFirstIncoming = (p, month, weekN) => {
+    if (!p.firstIncoming) return false;
+    const fi = new Date(p.firstIncoming);
+    // 현재 주차의 시작 날짜 가져오기
+    const ws2 = WEEK_STRUCTURE[month];
+    if (!ws2) return false;
+    const wInfo = ws2.weeks.find(w=>w.n===weekN);
+    if (!wInfo) return false;
+    // 주차 라벨에서 날짜 파싱 (예: "1주\n(06/01)" → 06/01)
+    const dateMatch = wInfo.label.match(/(\d{2}\/\d{2})/);
+    if (!dateMatch) return false;
+    const [mo, dy] = dateMatch[1].split('/');
+    const weekStart = new Date(2026, +mo-1, +dy);
+    return weekStart < fi;
+  };
+
+  // 신제품 먼저, 나머지는 기존 순서
+  let allProds = products.filter(p=>!q||p.product.toLowerCase().includes(q)||(p.master||'').includes(q));
+  const newProds = allProds.filter(p=>isNewProduct(p));
+  const oldProds = allProds.filter(p=>!isNewProduct(p));
+  const list = [...newProds, ...oldProds];
+
   const ws = WEEK_STRUCTURE[curMonth];
 
   if (!list.length) {
@@ -577,6 +613,7 @@ function drawInput(filter) {
     const saved = fcstData[key] || {};
     const acts = saved.acts || {};
     const savedWeeks = saved.weeks?.[curMonth] || [];
+    const isNP = isNewProduct(p);
 
     // 주차별 입력 셀
     let weekTotal = 0;
@@ -585,22 +622,30 @@ function drawInput(filter) {
       const savedV = savedWeeks[i] ?? 0;
       const v = chg[wkey] ?? savedV;
       weekTotal += (+v||0);
+
+      // 초도 입고일 이전 주차는 비활성화
+      const beforeFirstIncoming = isWeekBeforeFirstIncoming(p, curMonth, w.n);
+      if (beforeFirstIncoming) {
+        return `<td><div class="fi-disabled" title="초도 입고 예정일(${p.firstIncoming}) 이전">-</div></td>`;
+      }
       return `<td><input type="number" class="fi${chg[wkey]!==undefined?' ch':''}" value="${Math.round(v)||''}" placeholder="0"
         data-key="${key}" data-month="${curMonth}" data-widx="${i}" data-wkey="${wkey}"
         oninput="onWeekI(this)" min="0" ${locked?'disabled':''}></td>`;
     }).join('');
 
-    // 월계: 항상 현재 입력된 주차별 값의 합산으로 계산
-    // savedWeeks 기반 합산 (저장된 주차값 합계)
+    // 월계
     const savedWeekTotal = (savedWeeks).reduce((s,v)=>s+(+v||0), 0);
-    // chg에 이 월 변경사항 있으면 weekTotal, 없으면 savedWeeks 합산
     const hasChgThisMonth = Object.keys(chg).some(k=>k.startsWith(key+'_'+curMonth));
     const displayTotal = hasChgThisMonth ? weekTotal : savedWeekTotal;
 
-    return `<tr>
-      <td style="min-width:190px;position:sticky;left:0;background:var(--sf)">
+    // 신제품 행 스타일
+    const rowStyle = isNP ? 'background:rgba(52,211,153,.04);border-left:3px solid #059669' : '';
+
+    return `<tr style="${rowStyle}">
+      <td style="min-width:190px;position:sticky;left:0;background:${isNP?'rgba(52,211,153,.04)':'var(--sf)'}">
+        ${isNP ? '<div class="np-badge">🆕 신제품</div>' : ''}
         <div class="pn">${p.product}</div>
-        <div class="pc">${p.master||p.code} · ${p.brand}</div>
+        <div class="pc">${p.master||p.code} · ${p.brand}${p.firstIncoming?` · 초도입고 ${p.firstIncoming}`:''}</div>
       </td>
       ${[1,2,3,4,5].map(m=>`<td class="nr" style="color:var(--tx2)">${fmt(acts[String(m)])}</td>`).join('')}
       ${weekInputs}
@@ -857,6 +902,12 @@ function getFlags() {
     }
     if (actAvg>0&&totFcsts['6']>actAvg*6)
       flags.push({lv:'ylw',emoji:'🟡',product:p.product,ch:`월평균실적 ${fmt(Math.round(actAvg))}`,detail:`6월FCST ${fmt(totFcsts['6'])} — 실적 대비 ${(totFcsts['6']/actAvg).toFixed(0)}배`,type:'fcst',master});
+    // 신제품 알림
+    if (p.regDate) {
+      const daysSince = (new Date()-new Date(p.regDate))/(1000*60*60*24);
+      if (daysSince <= 30 && Object.values(totFcsts).every(v=>v===0))
+        flags.push({lv:'blu',emoji:'🆕',product:p.product,ch:`등록일 ${p.regDate}`,detail:`신제품 — 포케스팅 미입력 (${Math.floor(daysSince)}일 경과)`,type:'np',master});
+    }
   }
   return flags.slice(0,50);
 }
@@ -1038,7 +1089,7 @@ function openProdMo(){
   editingMaster=null;
   document.getElementById('prod-mo-title').textContent='품목 추가';
   document.getElementById('p-del-btn').style.display='none';
-  ['p-master','p-code','p-product','p-seq','p-moq','p-expiry'].forEach(id=>document.getElementById(id).value='');
+  ['p-master','p-code','p-product','p-seq','p-moq','p-expiry','p-first-incoming'].forEach(id=>document.getElementById(id).value='');
   openMo('prod-mo');
 }
 function editProd(master){
@@ -1055,6 +1106,7 @@ function editProd(master){
   document.getElementById('p-seq').value=p.seq||'';
   document.getElementById('p-moq').value=p.moq||0;
   document.getElementById('p-expiry').value=p.expiry||'';
+  document.getElementById('p-first-incoming').value=p.firstIncoming||'';
   openMo('prod-mo');
 }
 async function submitProduct(){
@@ -1066,7 +1118,9 @@ async function submitProduct(){
     grade:document.getElementById('p-grade').value,
     seq:document.getElementById('p-seq').value.trim(),
     moq:+document.getElementById('p-moq').value||0,
-    expiry:document.getElementById('p-expiry').value.trim()
+    expiry:document.getElementById('p-expiry').value.trim(),
+    firstIncoming:document.getElementById('p-first-incoming').value||'',
+    regDate: editingMaster ? undefined : new Date().toISOString().slice(0,10) // 신규 등록일만
   };
   if(!prod.product){toast('품목명을 입력하세요','err');return;}
   try {
