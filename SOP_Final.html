@@ -241,6 +241,13 @@ tr:hover td{background:rgba(108,123,255,.03)}
     <label>사용기한</label><input id="p-expiry" placeholder="예: 36M">
     <label>🆕 초도 입고 예정일 <span style="color:var(--tx2);font-weight:400">(신제품인 경우 입력 — 이 날짜 이전 주차는 포케스팅 입력 불가)</span></label>
     <input type="date" id="p-first-incoming" placeholder="">
+    <label>📦 전용 채널 <span style="color:var(--tx2);font-weight:400">(미설정 시 전체 채널 노출 — 특정 채널만 입력 가능하게 하려면 선택)</span></label>
+    <div id="p-channels-wrap" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px"></div>
+    <label style="margin-top:8px;display:flex;align-items:center;gap:8px;cursor:pointer">
+      <input type="checkbox" id="p-discontinued" style="width:16px;height:16px">
+      <span style="color:var(--red);font-weight:600">⛔ 단종 예정 품목</span>
+      <span style="color:var(--tx2);font-weight:400;font-size:11px">(체크 시 포케스팅/재고 시뮬레이션/알림에서 제외)</span>
+    </label>
     <div class="mbtn">
       <button class="btn-s" onclick="closeMo('prod-mo')">취소</button>
       <button class="btn-danger" id="p-del-btn" onclick="deleteProduct()" style="display:none">삭제</button>
@@ -257,6 +264,32 @@ tr:hover td{background:rgba(108,123,255,.03)}
     <label>마감 시각</label><input type="time" id="cfg-time" value="18:00">
     <label>주차 라벨 (예: 06.25_FCST)</label><input id="cfg-week" placeholder="MM.DD_FCST">
     <div class="mbtn"><button class="btn-s" onclick="closeMo('cfg-mo')">취소</button><button class="btn-p" onclick="submitConfig()">저장</button></div>
+  </div>
+</div>
+
+<!-- MATERIAL MODAL -->
+<div class="mo" id="mat-mo">
+  <div class="mbox">
+    <h3 id="mat-mo-title">부자재 추가</h3>
+    <label>품목명</label>
+    <input id="mat-product" placeholder="예: 레티날 세럼 150ml" list="prod-list">
+    <datalist id="prod-list"></datalist>
+    <label>마스터코드</label>
+    <input id="mat-master" placeholder="예: S017305">
+    <label>부자재명</label>
+    <input id="mat-material" placeholder="예: 박스, 설명서, 파우치">
+    <label>현재 재고 수량</label>
+    <input type="number" id="mat-qty" placeholder="0" min="0">
+    <label>최소 안전재고 (이 이하면 경고)</label>
+    <input type="number" id="mat-min" placeholder="0" min="0">
+    <label>단위</label>
+    <input id="mat-unit" value="개" placeholder="개, 장, 롤...">
+    <label>비고</label>
+    <input id="mat-note" placeholder="메모">
+    <div class="mbtn">
+      <button class="btn-s" onclick="closeMo('mat-mo')">취소</button>
+      <button class="btn-p" onclick="submitMaterial()">저장</button>
+    </div>
   </div>
 </div>
 
@@ -303,22 +336,45 @@ let isDeadlinePassed=false, isConfirmed=false;
 
 // ── API ───────────────────────────────────────────────────────
 const _apiCache = {};
+
+// GAS CORS 우회: 직접 호출 실패시 프록시 사용
+async function fetchGAS(url, options={}) {
+  try {
+    // 1차: 직접 호출
+    const r = await fetch(url, {...options, redirect:'follow'});
+    if (r.ok) return r;
+  } catch(e) {}
+  // 2차: CORS 프록시
+  const proxy = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
+  const r2 = await fetch(proxy);
+  const raw = await r2.json();
+  return { ok:true, json: async () => JSON.parse(raw.contents) };
+}
+
 async function api(action, params={}) {
   const url = GAS_URL + '?action=' + action + Object.entries(params).map(([k,v])=>`&${k}=${encodeURIComponent(v)}`).join('');
-  // getStock, getFcst는 캐시 사용 (새로고침 버튼으로만 갱신)
   if (_apiCache[url]) return _apiCache[url];
-  const r = await fetch(url);
-  const data = await r.json();
+  const r = await fetchGAS(url);
+  const data = typeof r.json === 'function' ? await r.json() : await r.json();
   if (!data.error) _apiCache[url] = data;
   return data;
+}
+
+async function apiPost(body) {
+  try {
+    const r = await fetch(GAS_URL, {method:'POST', redirect:'follow', body:JSON.stringify(body)});
+    return r.json();
+  } catch(e) {
+    // POST는 프록시 불가, GAS URL을 GET으로 변환해서 우회
+    const url = GAS_URL + '?action=post&data=' + encodeURIComponent(JSON.stringify(body));
+    const r2 = await fetchGAS(url);
+    return typeof r2.json === 'function' ? r2.json() : r2.json();
+  }
 }
 function clearApiCache(action) {
   Object.keys(_apiCache).forEach(k => { if (k.includes('action='+action)) delete _apiCache[k]; });
 }
-async function apiPost(body) {
-  const r = await fetch(GAS_URL, { method:'POST', body: JSON.stringify(body) });
-  return r.json();
-}
+
 
 // ── INIT ──────────────────────────────────────────────────────
 async function checkServer() {
@@ -329,7 +385,10 @@ async function checkServer() {
       el.className = 'gas-status gas-err';
       return false;
     }
-    const cfg = await api('getConfig');
+    // 타임아웃 10초
+    const cfgPromise = api('getConfig');
+    const timeout = new Promise((_,reject)=>setTimeout(()=>reject(new Error('서버 응답 시간 초과')),10000));
+    const cfg = await Promise.race([cfgPromise, timeout]);
     if (cfg.error) throw new Error(cfg.error);
     // 서버 확인하면서 받은 config 바로 캐싱 (loadAll에서 중복 호출 방지)
     config = cfg;
@@ -489,6 +548,7 @@ function render(id) {
   else if (id==='settings') renderSettings(el);
   else if (id==='my') renderMy(el);
   else if (id==='stock') renderStock(el);
+  else if (id==='materials') renderMaterials(el);
 }
 
 // ── INPUT ─────────────────────────────────────────────────────
@@ -595,8 +655,16 @@ function drawInput(filter) {
     return weekStart < fi;
   };
 
-  // 신제품 먼저, 나머지는 기존 순서
-  let allProds = products.filter(p=>!q||p.product.toLowerCase().includes(q)||(p.master||'').includes(q));
+  // 단종예정 제외 + 전용채널 필터 + 신제품 먼저
+  let allProds = products.filter(p=>{
+    if (p.discontinued) return false; // 단종 제외
+    // 전용채널 설정 있으면 해당 채널만 노출
+    if (p.dedicatedChannels && p.dedicatedChannels.length > 0) {
+      if (!p.dedicatedChannels.includes(curCh)) return false;
+    }
+    if (q && !p.product.toLowerCase().includes(q) && !(p.master||'').includes(q)) return false;
+    return true;
+  });
   const newProds = allProds.filter(p=>isNewProduct(p));
   const oldProds = allProds.filter(p=>!isNewProduct(p));
   const list = [...newProds, ...oldProds];
@@ -653,7 +721,7 @@ function drawInput(filter) {
     </tr>`;
   }).join('');
 
-  const weekHeaders = ws.weeks.map(w=>`<th style="color:var(--ac2);font-size:11px;white-space:pre-line;min-width:72px">${w.label}</th>`).join('');
+  const weekHeaders = ws.weeks.map(w=>`<th style="position:sticky;top:0;z-index:10;background:var(--sf2);color:var(--ac2);font-size:11px;white-space:pre-line;min-width:72px;padding:9px 8px;border-bottom:2px solid var(--bd)">${w.label}</th>`).join('');
 
   document.getElementById('input-tbl').innerHTML = `
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:12px;color:#1e40af;line-height:1.8">
@@ -663,13 +731,13 @@ function drawInput(filter) {
       • <strong style="color:#dc2626">⚠️ 다른 월이나 채널로 이동하면 자동 저장됩니다</strong> — 수량 입력 후 바로 이동하셔도 돼요!<br>
       • 모든 월 입력 완료 후 <strong>✅ 입력 확정</strong> 버튼을 꼭 눌러주세요
     </div>
-    <div class="tw"><table>
+    <div style="overflow-x:auto;overflow-y:auto;max-height:65vh;border-radius:10px;border:1px solid var(--bd)"><table style="width:100%;border-collapse:separate;border-spacing:0;font-size:12px">
       <thead>
         <tr>
-          <th style="text-align:left;position:sticky;left:0;background:var(--sf2);min-width:190px">품목명</th>
-          <th style="color:var(--tx2)">1월</th><th style="color:var(--tx2)">2월</th><th style="color:var(--tx2)">3월</th><th style="color:var(--tx2)">4월</th><th style="color:var(--tx2)">5월</th>
+          <th style="text-align:left;position:sticky;top:0;left:0;z-index:20;background:var(--sf2);padding:9px 11px;border-bottom:2px solid var(--bd);min-width:190px;white-space:nowrap">품목명</th>
+          <th style="position:sticky;top:0;z-index:10;background:var(--sf2);color:var(--tx2);padding:9px 10px;border-bottom:2px solid var(--bd)">1월</th><th style="position:sticky;top:0;z-index:10;background:var(--sf2);color:var(--tx2);padding:9px 10px;border-bottom:2px solid var(--bd)">2월</th><th style="position:sticky;top:0;z-index:10;background:var(--sf2);color:var(--tx2);padding:9px 10px;border-bottom:2px solid var(--bd)">3월</th><th style="position:sticky;top:0;z-index:10;background:var(--sf2);color:var(--tx2);padding:9px 10px;border-bottom:2px solid var(--bd)">4월</th><th style="position:sticky;top:0;z-index:10;background:var(--sf2);color:var(--tx2);padding:9px 10px;border-bottom:2px solid var(--bd)">5월</th>
           ${weekHeaders}
-          <th style="color:var(--ac);background:rgba(79,99,231,.06)">${ws.label}계</th>
+          <th style="position:sticky;top:0;z-index:10;background:rgba(79,99,231,.1);color:var(--ac);padding:9px 10px;border-bottom:2px solid var(--bd);white-space:nowrap">${ws.label}계</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
@@ -861,6 +929,12 @@ function renderDash(el) {
           </div>`).join('')||'<div style="color:var(--tx2);font-size:13px;padding:14px 0;text-align:center">없음</div>'}
       </div>
     </div>
+    ${(()=>{
+      const mats=JSON.parse(localStorage.getItem('sop_materials')||'[]').filter(m=>m.qty<m.minQty&&m.minQty>0);
+      return mats.length>0?`<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:var(--red)">
+        ⚠️ <strong>부자재 안전재고 미달 ${mats.length}건</strong> — ${mats.map(m=>m.material+'('+m.product+')').join(', ')}
+      </div>`:'';
+    })()}
     <div class="stitle">⚠️ 자동 감지 — 검토 필요 <span class="cnt">${flags.length}건</span></div>
     ${flags.length===0
       ?`<div style="text-align:center;padding:30px;color:var(--tx2);background:var(--sf);border-radius:8px">감지된 이슈 없음 🎉</div>`
@@ -883,6 +957,7 @@ function hasAnyInput(mgr) {
 function getFlags() {
   const flags=[];
   for (const p of products) {
+    if (p.discontinued) continue; // 단종 예정 제외
     const master=p.master||p.code;
     const totFcsts={};
     for (const m of MONTHS) {
@@ -1090,6 +1165,8 @@ function openProdMo(){
   document.getElementById('prod-mo-title').textContent='품목 추가';
   document.getElementById('p-del-btn').style.display='none';
   ['p-master','p-code','p-product','p-seq','p-moq','p-expiry','p-first-incoming'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('p-discontinued').checked=false;
+  buildChannelCheckboxes([]);
   openMo('prod-mo');
 }
 function editProd(master){
@@ -1107,6 +1184,8 @@ function editProd(master){
   document.getElementById('p-moq').value=p.moq||0;
   document.getElementById('p-expiry').value=p.expiry||'';
   document.getElementById('p-first-incoming').value=p.firstIncoming||'';
+  document.getElementById('p-discontinued').checked=!!p.discontinued;
+  buildChannelCheckboxes(p.dedicatedChannels||[]);
   openMo('prod-mo');
 }
 async function submitProduct(){
@@ -1120,7 +1199,9 @@ async function submitProduct(){
     moq:+document.getElementById('p-moq').value||0,
     expiry:document.getElementById('p-expiry').value.trim(),
     firstIncoming:document.getElementById('p-first-incoming').value||'',
-    regDate: editingMaster ? undefined : new Date().toISOString().slice(0,10) // 신규 등록일만
+    regDate: editingMaster ? undefined : new Date().toISOString().slice(0,10),
+    discontinued: document.getElementById('p-discontinued').checked,
+    dedicatedChannels: getCheckedChannels()
   };
   if(!prod.product){toast('품목명을 입력하세요','err');return;}
   try {
@@ -1350,7 +1431,7 @@ function drawStockTable(filter) {
     '10':['W1','W2','W3','W4'],'11':['W1','W2','W3','W4'],'12':['W1','W2','W3','W4'],
   };
 
-  const rows = products.map(p => {
+  const rows = products.filter(p=>!p.discontinued).map(p => {
     const master = p.master||p.code;
     const sd = stockData[master]||{stock:0,weeks:[]};
 
@@ -1453,6 +1534,129 @@ function addStockAgenda(master,product){
   agenda.push({type:'order',product,body:`재고 부족 예상 — ${fd?.wkey||''} 기준 해외FCST ${fmt(fd?.overseas||0)} 출고 후 ${fmt(Math.abs(fd?.running||0))} 부족`,owner:''});
   localStorage.setItem('sop_ag',JSON.stringify(agenda));
   toast('✅ 아젠다 추가됨','ok');
+}
+
+// ── 채널 체크박스 (전용채널 설정) ───────────────────────────────
+function buildChannelCheckboxes(selected) {
+  const wrap = document.getElementById('p-channels-wrap');
+  if (!wrap) return;
+  const allChs = [...new Set([...allChannels,'B2B','라쿠텐','메디KR_자사몰','메디KR_외부몰','메디TW_자사몰','메디HK_자사몰','메디SG_자사몰','쇼피TW','쇼피MY','쇼피SG','쇼피PP','쇼피VN','쇼피파이US','아마존US','아마존AU','아마존UK','아마존DE','아마존JP','틱톡샵US','틱톡샵MY','틱톡샵PH','틱톡샵SG','틱톡샵UK','틱톡샵VN','올리브영','큐텐','히디프_국내_자사몰'])].sort();
+  wrap.innerHTML = allChs.map(ch=>`
+    <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;padding:3px 8px;border-radius:5px;border:1px solid var(--bd);background:${selected.includes(ch)?'var(--ac)':'var(--sf2)'};color:${selected.includes(ch)?'#fff':'var(--tx2)'}">
+      <input type="checkbox" ${selected.includes(ch)?'checked':''} value="${ch}" style="display:none" onchange="this.closest('label').style.background=this.checked?'var(--ac)':'var(--sf2)';this.closest('label').style.color=this.checked?'#fff':'var(--tx2)'">
+      ${ch}
+    </label>`).join('');
+}
+function getCheckedChannels() {
+  const wrap = document.getElementById('p-channels-wrap');
+  if (!wrap) return [];
+  return [...wrap.querySelectorAll('input[type=checkbox]:checked')].map(c=>c.value);
+}
+
+
+// ── 부자재 재고 ────────────────────────────────────────────────
+function renderMaterials(el) {
+  const saved = JSON.parse(localStorage.getItem('sop_materials')||'[]');
+  el.innerHTML = `
+    <div class="th">
+      <div><div class="ttl">🔩 부자재 재고</div><div class="tsub">품목별 보유 부자재 재고 현황</div></div>
+      <button class="btn-p" onclick="openAddMaterial()">+ 부자재 추가</button>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr>
+          <th class="L" style="min-width:180px">품목명</th>
+          <th class="L" style="min-width:150px">부자재명</th>
+          <th>재고 수량</th>
+          <th>단위</th>
+          <th>최종 업데이트</th>
+          <th>비고</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="mat-tbody">
+          ${saved.length===0
+            ? '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--tx2)">등록된 부자재가 없습니다</td></tr>'
+            : saved.map((m,i)=>`<tr>
+                <td><div class="pn">${m.product}</div><div class="pc">${m.master||''}</div></td>
+                <td>${m.material}</td>
+                <td class="nr" style="font-weight:600;color:${m.qty<m.minQty?'var(--red)':'var(--tx)'}">${m.qty.toLocaleString('ko-KR')}</td>
+                <td>${m.unit||'개'}</td>
+                <td style="font-size:11px;color:var(--tx2)">${m.updatedAt||''}</td>
+                <td style="font-size:12px;color:var(--tx2)">${m.note||''}</td>
+                <td>
+                  <button class="btn-s" style="padding:3px 8px;font-size:11px" onclick="editMaterial(${i})">수정</button>
+                  <button class="btn-danger" style="padding:3px 8px;font-size:11px;margin-left:4px" onclick="deleteMaterial(${i})">삭제</button>
+                </td>
+              </tr>`).join('')
+          }
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+let editingMaterialIdx = null;
+
+function openAddMaterial() {
+  // 품목명 자동완성 목록
+  const dl = document.getElementById('prod-list');
+  if (dl) dl.innerHTML = products.map(p=>`<option value="${p.product}">`).join('');
+  editingMaterialIdx = null;
+  document.getElementById('mat-mo-title').textContent = '부자재 추가';
+  ['mat-product','mat-master','mat-material','mat-qty','mat-min','mat-unit','mat-note'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
+  document.getElementById('mat-unit').value='개';
+  openMo('mat-mo');
+}
+
+function editMaterial(idx) {
+  const saved = JSON.parse(localStorage.getItem('sop_materials')||'[]');
+  const m = saved[idx];
+  if (!m) return;
+  editingMaterialIdx = idx;
+  document.getElementById('mat-mo-title').textContent = '부자재 수정';
+  document.getElementById('mat-product').value = m.product||'';
+  document.getElementById('mat-master').value = m.master||'';
+  document.getElementById('mat-material').value = m.material||'';
+  document.getElementById('mat-qty').value = m.qty||0;
+  document.getElementById('mat-min').value = m.minQty||0;
+  document.getElementById('mat-unit').value = m.unit||'개';
+  document.getElementById('mat-note').value = m.note||'';
+  openMo('mat-mo');
+}
+
+function submitMaterial() {
+  const product = document.getElementById('mat-product').value.trim();
+  const material = document.getElementById('mat-material').value.trim();
+  const qty = +document.getElementById('mat-qty').value||0;
+  if (!product||!material) { toast('품목명과 부자재명을 입력하세요','err'); return; }
+  
+  const saved = JSON.parse(localStorage.getItem('sop_materials')||'[]');
+  const entry = {
+    product, master: document.getElementById('mat-master').value.trim(),
+    material, qty,
+    minQty: +document.getElementById('mat-min').value||0,
+    unit: document.getElementById('mat-unit').value||'개',
+    note: document.getElementById('mat-note').value.trim(),
+    updatedAt: new Date().toLocaleDateString('ko-KR')
+  };
+  
+  if (editingMaterialIdx !== null) saved[editingMaterialIdx] = entry;
+  else saved.push(entry);
+  
+  localStorage.setItem('sop_materials', JSON.stringify(saved));
+  closeMo('mat-mo');
+  renderMaterials(document.getElementById('ct'));
+  toast('✅ 부자재 저장됨','ok');
+}
+
+function deleteMaterial(idx) {
+  if (!confirm('삭제하시겠습니까?')) return;
+  const saved = JSON.parse(localStorage.getItem('sop_materials')||'[]');
+  saved.splice(idx,1);
+  localStorage.setItem('sop_materials', JSON.stringify(saved));
+  renderMaterials(document.getElementById('ct'));
 }
 
 // ── UTILS ─────────────────────────────────────────────────────
