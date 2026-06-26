@@ -469,7 +469,7 @@ async function doLogin() {
   if (!role) { toast('역할을 선택하세요','err'); return; }
   if (role==='admin') {
     const pw = document.getElementById('pw').value;
-    if (pw !== (config.ADMIN_PIN||'1234')) { toast('PIN이 올바르지 않습니다','err'); return; }
+    if (pw !== String(config.ADMIN_PIN||'1234')) { toast('PIN이 올바르지 않습니다','err'); return; }
     user = '관리자';
   } else {
     user = document.getElementById('m-sel').value;
